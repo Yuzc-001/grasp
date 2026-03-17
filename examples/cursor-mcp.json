@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "grasp": {
+      "command": "npx",
+      "args": ["-y", "grasp"]
+    }
+  }
+}

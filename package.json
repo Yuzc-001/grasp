@@ -1,0 +1,35 @@
+{
+  "name": "grasp",
+  "version": "0.1.0",
+  "description": "Give AI its own browser. A local MCP server for full Chrome control via CDP.",
+  "main": "index.js",
+  "bin": {
+    "grasp": "./index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "playwright-core": "^1.58.2",
+    "zod": "^3.25.76"
+  },
+  "keywords": [
+    "mcp",
+    "browser-automation",
+    "ai-agent",
+    "cdp",
+    "webmcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yuzc-001/grasp.git"
+  },
+  "homepage": "https://github.com/Yuzc-001/grasp#readme",
+  "bugs": {
+    "url": "https://github.com/Yuzc-001/grasp/issues"
+  },
+  "license": "MIT"
+}

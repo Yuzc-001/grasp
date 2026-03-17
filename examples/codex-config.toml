@@ -1,0 +1,4 @@
+[mcp_servers.grasp]
+type    = "stdio"
+command = "npx"
+args    = ["-y", "grasp"]

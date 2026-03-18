@@ -6,6 +6,8 @@ import { buildHintMap, rebindHintCandidate } from '../layer2-perception/hints.js
 import { clickByHintId, typeByHintId, scroll, watchElement, pressKey, hoverByHintId } from '../layer3-action/actions.js';
 import { errorResponse, imageResponse, textResponse } from './responses.js';
 import { describeMode, syncPageState } from './state.js';
+import { rankAffordances } from './affordances.js';
+import { extractMainContent, waitUntilStable } from './content.js';
 import { audit, readLogs } from './audit.js';
 import { verifyTypeResult, verifyGenericAction } from './postconditions.js';
 import { TYPE_FAILED } from './error-codes.js';
@@ -128,6 +130,56 @@ export function registerTools(server, state) {
   );
 
   server.registerTool(
+    'wait_until_stable',
+    {
+      description: 'Wait until the page stops changing before reading content.',
+      inputSchema: {
+        checks: z.number().int().min(1).optional().describe('Number of consecutive stable snapshots required'),
+        interval: z.number().min(0).optional().describe('Polling interval in milliseconds'),
+        timeout: z.number().min(0).optional().describe('Maximum wait time in milliseconds'),
+      },
+    },
+    async ({ checks, interval, timeout } = {}) => {
+      const page = await getActivePage();
+      const result = await waitUntilStable(page, {
+        stableChecks: checks,
+        interval,
+        timeout,
+      });
+      return textResponse(
+        [
+          result.stable ? 'Page stabilized.' : 'Page did not stabilize in time.',
+          `Captured ${result.attempts} snapshots.`,
+        ],
+        {
+          stable: result.stable,
+          attempts: result.attempts,
+          snapshot: result.snapshot,
+        }
+      );
+    }
+  );
+
+  server.registerTool(
+    'extract_main_content',
+    {
+      description: 'Extract the main textual content for the current page.',
+      inputSchema: {},
+    },
+    async () => {
+      const page = await getActivePage();
+      await syncPageState(page, state, { force: true });
+      const content = await extractMainContent(page);
+      return textResponse(
+        content.text,
+        {
+          title: content.title,
+        }
+      );
+    }
+  );
+
+  server.registerTool(
     'get_hint_map',
     {
       description: "Get the Hint Map of interactive elements. Each element gets a short ID like [B1], [I2], [L3]. Use these IDs with click and type.",
@@ -169,6 +221,26 @@ export function registerTools(server, state) {
           + ` raw DOM: ${(rawSize / 1000).toFixed(1)}K chars)`;
       }
       return textResponse(`${header}\n\n${lines.join('\n')}${efficiency}`);
+    }
+  );
+
+  server.registerTool(
+    'search_affordances',
+    {
+      description: 'Rank search-friendly hints (inputs/buttons) from the current hint map.',
+      inputSchema: {},
+    },
+    async () => {
+      const page = await getActivePage();
+      await syncPageState(page, state, { force: true });
+      const ranking = rankAffordances({ hints: state.hintMap });
+      return textResponse(
+        `Search affordance candidates: ${ranking.search_input.length}`,
+        {
+          search_input: ranking.search_input,
+          command_button: ranking.command_button,
+        }
+      );
     }
   );
 

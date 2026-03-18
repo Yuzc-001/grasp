@@ -9,7 +9,7 @@
  * @param {import('playwright').Page} page
  * @param {Map<string, string>} registry  fingerprint → id 映射表
  * @param {{ B: number, I: number, L: number, S: number }} counters  各前缀已用计数
- * @returns {Promise<Array<{id: string, type: string, label: string, x: number, y: number}>>}
+ * @returns {Promise<Array<{id: string, type: string, label: string, x: number, y: number, meta: Record<string, string> }>>}
  */
 export async function buildHintMap(page, registry = new Map(), counters = { B: 0, I: 0, L: 0, S: 0 }) {
   // 将 registry 序列化传入 browser context（Map 不可直接传）
@@ -164,8 +164,15 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
 
       // 10. 写入 data-grasp-id
       el.setAttribute('data-grasp-id', id);
-
-      results.push({ id, type, label, x: cx, y: cy });
+      const meta = {
+        name: el.getAttribute('name') ?? '',
+        idAttr: el.getAttribute('id') ?? '',
+        ariaLabel: el.getAttribute('aria-label') ?? '',
+        placeholder: el.getAttribute('placeholder') ?? '',
+        role,
+        tag,
+      };
+      results.push({ id, type, label, x: cx, y: cy, meta });
     }
 
     return { hints: results, newEntries, counters };

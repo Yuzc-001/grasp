@@ -1,10 +1,15 @@
 import { getActivePage } from '../../layer1-bridge/chrome.js';
-import { waitUntilStable } from '../content.js';
+import { typeByHintId, clickByHintId, pressKey } from '../../layer3-action/actions.js';
+import { extractMainContent, waitUntilStable } from '../content.js';
 import { observeSearchSnapshot } from '../observe.js';
 import { createTaskFrame } from '../task-frame.js';
+import { syncPageState } from '../state.js';
+import { rebindHintCandidate } from '../../layer2-perception/hints.js';
+import { NO_EFFECT, LOADING_PENDING, EXECUTION_FAILED } from '../error-codes.js';
 
 function chooseSearchPlan(snapshot, frame) {
-  const searchHint = (snapshot?.hints ?? []).find((hint) => hint.semantic === 'search_input');
+  const searchHint = (snapshot?.ranking?.search_input ?? [])[0];
+  const submitHint = snapshot?.submitCandidate;
   let mode = 'primary_submit';
   if (frame.nextRecovery === 'alternate_submit') {
     mode = 'alternate_submit';
@@ -13,21 +18,25 @@ function chooseSearchPlan(snapshot, frame) {
   }
   frame.nextRecovery = null;
   const plan = {
-    query: snapshot?.query,
+    query: snapshot?.query ?? '',
     mode,
-    hintId: searchHint?.id ?? frame.semanticBindings.get('search_input') ?? null,
+    searchInputHintId: searchHint?.id ?? frame.semanticBindings.get('search_input') ?? null,
+    submitHintId: submitHint?.id ?? frame.semanticBindings.get('submit_control') ?? null,
   };
-  if (plan.hintId) {
-    frame.semanticBindings.set('search_input', plan.hintId);
+  if (plan.searchInputHintId) {
+    frame.semanticBindings.set('search_input', plan.searchInputHintId);
+  }
+  if (plan.submitHintId) {
+    frame.semanticBindings.set('submit_control', plan.submitHintId);
   }
   return plan;
 }
 
 function applyRecovery(frame, verdict) {
   if (!verdict?.error_code) return;
-  if (verdict.error_code === 'NO_EFFECT') {
+  if (verdict.error_code === NO_EFFECT) {
     frame.nextRecovery = 'alternate_submit';
-  } else if (verdict.error_code === 'LOADING_PENDING') {
+  } else if (verdict.error_code === LOADING_PENDING) {
     frame.nextRecovery = 'wait_then_reverify';
   } else {
     frame.nextRecovery = 'reobserve';
@@ -46,6 +55,54 @@ function finalizeResult(frame, status, plan, verdict) {
     verdict,
     frame,
   };
+}
+
+function createRebuildHints(page, state) {
+  return async (hintId) => {
+    const previousHint = state.hintMap.find((hint) => hint.id === hintId);
+    await syncPageState(page, state, { force: true });
+    if (!previousHint) return null;
+    return rebindHintCandidate(previousHint, state.hintMap);
+  };
+}
+
+async function verifySearchOutcome({
+  page,
+  state,
+  plan,
+  snapshot,
+  deps = {},
+}) {
+  const prevDomRevision = snapshot?.domRevision ?? 0;
+  const prevUrl = snapshot?.url ?? (await page.url());
+  const prevContent = snapshot?.content?.text ?? '';
+  const syncState = deps.syncState ?? syncPageState;
+  await syncState(page, state, { force: true });
+  const currentDomRevision = state.pageState.domRevision;
+  const currentUrl = page.url();
+  const readyState = await page.evaluate(() => document.readyState);
+  const extractContent = deps.extractContent ?? extractMainContent;
+  const newContent = (await extractContent(page)).text;
+  const evidence = {
+    domRevision: currentDomRevision,
+    url: currentUrl,
+    content: newContent,
+    readyState,
+  };
+
+  if (
+    currentDomRevision !== prevDomRevision ||
+    currentUrl !== prevUrl ||
+    newContent !== prevContent
+  ) {
+    return { ok: true, evidence };
+  }
+
+  if (readyState !== 'complete') {
+    return { ok: false, error_code: LOADING_PENDING, evidence };
+  }
+
+  return { ok: false, error_code: NO_EFFECT, evidence };
 }
 
 export async function runSearchTask({
@@ -78,7 +135,7 @@ export async function runSearchTask({
       return finalizeResult(frame, 'completed', plan, verdict);
     }
 
-    if (verdict.error_code === 'LOADING_PENDING') {
+    if (verdict.error_code === LOADING_PENDING) {
       await waitFn({ plan, snapshot, frame, query });
       const retryVerdict = await verifier({ plan, execution, snapshot, frame, retry: true });
       frame.history.push({ phase: 'wait_then_reverify', plan, verdict: retryVerdict });
@@ -95,14 +152,99 @@ export async function runSearchTask({
   return finalizeResult(frame, 'failed', null, null);
 }
 
-export async function runSearchTaskTool({ state, query, max_attempts = 3 }) {
-  const page = await getActivePage();
-  const observer = async ({ frame }) => observeSearchSnapshot({ page, state, query, frame });
-  const executor = async (plan) => ({ ok: true, execution: plan });
-  const verifier = async () => ({ ok: true, evidence: { ready: true } });
-  const waitThenReverify = async () => {
-    await waitUntilStable(page, { stableChecks: 2, interval: 120, timeout: 2000 });
+export async function runSearchTaskTool({
+  state,
+  query,
+  max_attempts = 3,
+  deps = {},
+}) {
+  const {
+    getActivePage: getActivePageOverride,
+    observer: observerOverride,
+    executor: executorOverride,
+    verifier: verifierOverride,
+    waitThenReverify: waitThenReverifyOverride,
+    waitStableAction: waitStableActionOverride,
+    extractContentAction: extractContentActionOverride,
+    typeAction: typeActionOverride,
+    clickAction: clickActionOverride,
+    pressKeyAction: pressKeyActionOverride,
+    syncStateAction: syncStateActionOverride,
+  } = deps;
+
+  const getPage = getActivePageOverride ?? getActivePage;
+  const waitStableAction = waitStableActionOverride ?? waitUntilStable;
+  const extractContentAction = extractContentActionOverride ?? extractMainContent;
+  const typeAction = typeActionOverride ?? typeByHintId;
+  const clickAction = clickActionOverride ?? clickByHintId;
+  const pressKeyAction = pressKeyActionOverride ?? pressKey;
+  const syncStateAction = syncStateActionOverride ?? syncPageState;
+
+  const page = await getPage();
+  const rebuildHints = createRebuildHints(page, state);
+  let observer = observerOverride;
+  if (!observer) {
+    observer = ({ frame }) => observeSearchSnapshot({
+      page,
+      state,
+      query,
+      frame,
+      deps: { waitStable: waitStableAction, extractContent: extractContentAction },
+    });
+  }
+
+  let executor = executorOverride;
+  if (!executor) {
+    executor = async (plan) => {
+    if (!plan.searchInputHintId) {
+      return { ok: false, error_code: EXECUTION_FAILED };
+    }
+    try {
+      if (plan.mode === 'primary_submit') {
+        await typeAction(page, plan.searchInputHintId, query, true, { rebuildHints });
+      } else if (plan.mode === 'alternate_submit') {
+        await typeAction(page, plan.searchInputHintId, query, false, { rebuildHints });
+        if (plan.submitHintId) {
+          await clickAction(page, plan.submitHintId, { rebuildHints });
+        } else {
+          await pressKeyAction(page, 'Enter');
+        }
+      } else {
+        await pressKeyAction(page, 'Enter');
+      }
+      await syncStateAction(page, state, { force: true });
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error_code: EXECUTION_FAILED,
+        evidence: { message: err.message },
+      };
+    }
   };
+  }
+
+  let verifier = verifierOverride;
+  if (!verifier) {
+    verifier = ({ plan, snapshot }) =>
+      verifySearchOutcome({
+        page,
+        state,
+        plan,
+        snapshot,
+        deps: {
+          extractContent: extractContentAction,
+          syncState: syncStateAction,
+        },
+      });
+  }
+
+  let waitThenReverify = waitThenReverifyOverride;
+  if (!waitThenReverify) {
+    waitThenReverify = async () => {
+      await waitStableAction(page, { stableChecks: 2, interval: 120, timeout: 2000 });
+    };
+  }
 
   const result = await runSearchTask({
     query,

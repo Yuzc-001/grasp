@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runSearchTask } from '../../src/server/tasks/search-task.js';
+import { runSearchTask, runSearchTaskTool } from '../../src/server/tasks/search-task.js';
+import { createServerState } from '../../src/server/state.js';
+import { createFakePage } from '../helpers/fake-page.js';
 
 test('search task uses search_input then verifies result region', async () => {
   const result = await runSearchTask({
@@ -88,4 +90,45 @@ test('search task waits and reverifies before failing a loading page', async () 
   assert.equal(executeCount, 1);
   assert.equal(verifyCount, 2);
   assert.equal(waits.length, 1);
+});
+
+test('runSearchTaskTool executes real actions through provided dependencies', async () => {
+  const state = createServerState();
+  let typed = 0;
+  const page = createFakePage({
+    evaluate: async (fn, ...args) => {
+      const str = fn.toString();
+      if (str.includes('document.readyState')) return 'complete';
+      return fn(...args);
+    },
+  });
+
+  const result = await runSearchTaskTool({
+    state,
+    query: 'pi agent 是啥',
+    max_attempts: 1,
+    deps: {
+      getActivePage: async () => page,
+      observer: async () => ({
+        snapshot: {
+          query: 'pi agent 是啥',
+          hints: [{ id: 'I1', semantic: 'search_input' }],
+          ranking: { search_input: [{ id: 'I1' }], command_button: [] },
+          content: { text: '' },
+          domRevision: 0,
+          url: 'https://example.com/',
+        },
+        content: { text: '' },
+      }),
+      typeAction: async () => { typed += 1; },
+      clickAction: async () => undefined,
+      pressKeyAction: async () => undefined,
+      waitStableAction: async () => ({ stable: true, attempts: 1 }),
+      extractContentAction: async () => ({ text: 'after' }),
+      syncStateAction: async () => undefined,
+    },
+  });
+
+  assert(result.status === 'completed');
+  assert(typed > 0);
 });

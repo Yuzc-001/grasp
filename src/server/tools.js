@@ -7,13 +7,17 @@ import { clickByHintId, typeByHintId, scroll, watchElement, pressKey, hoverByHin
 import { errorResponse, imageResponse, textResponse } from './responses.js';
 import { describeMode, syncPageState } from './state.js';
 import { audit, readLogs } from './audit.js';
-import { verifyTypeResult } from './postconditions.js';
+import { verifyTypeResult, verifyGenericAction } from './postconditions.js';
 import { TYPE_FAILED } from './error-codes.js';
 
 const HIGH_RISK_KEYWORDS = [
   '发送', '提交', '删除', '支付', '确认', '清空', '注销', '退出', '解绑', '重置',
   'send', 'submit', 'delete', 'pay', 'confirm', 'clear', 'logout', 'unsubscribe', 'reset', 'remove',
 ];
+
+async function getActiveHintId(page) {
+  return page.evaluate(() => document.activeElement?.getAttribute('data-grasp-id') ?? null);
+}
 
 function createRebuildHints(page, state) {
   return async (hintId) => {
@@ -22,6 +26,16 @@ function createRebuildHints(page, state) {
     if (!previousHint) return null;
     return rebindHintCandidate(previousHint, state.hintMap);
   };
+}
+
+function buildStructuredError(message, normalizedHintId, verdict) {
+  const meta = {
+    error_code: verdict?.error_code ?? TYPE_FAILED,
+    retryable: verdict?.retryable ?? true,
+    suggested_next_step: verdict?.suggested_next_step ?? 'retry',
+    evidence: verdict?.evidence ?? { hint_id: normalizedHintId },
+  };
+  return errorResponse(message, meta);
 }
 
 export function registerTools(server, state) {
@@ -166,10 +180,13 @@ export function registerTools(server, state) {
     },
     async ({ hint_id }) => {
       const page = await getActivePage();
+      const normalizedHintId = hint_id.toUpperCase();
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = state.lastUrl;
+      const prevActiveId = await getActiveHintId(page);
+      const rebuildHints = createRebuildHints(page, state);
 
       try {
-        const normalizedHintId = hint_id.toUpperCase();
-
         if (state.safeMode) {
           const label = await page.evaluate((id) => {
             const el = document.querySelector(`[data-grasp-id="${id}"]`);
@@ -185,19 +202,35 @@ export function registerTools(server, state) {
           }
         }
 
-        const urlBefore = page.url();
-        const rebuildHints = createRebuildHints(page, state);
         const result = await clickByHintId(page, normalizedHintId, { rebuildHints });
-        audit('click', `[${normalizedHintId}] "${result.label}"`);
         await syncPageState(page, state, { force: true });
+        const verification = await verifyGenericAction({
+          page,
+          hintId: normalizedHintId,
+          prevDomRevision,
+          prevUrl,
+          prevActiveId,
+          newDomRevision: state.pageState.domRevision,
+        });
 
+        if (!verification.ok) {
+          await audit('click_failed', `[${normalizedHintId}] ${verification.error_code}`);
+          return buildStructuredError(
+            `Click verification failed for [${normalizedHintId}]`,
+            normalizedHintId,
+            verification
+          );
+        }
+
+        audit('click', `[${normalizedHintId}] "${result.label}"`);
         const urlAfter = page.url();
-        const nav = urlAfter !== urlBefore ? `\nNavigated to: ${urlAfter}` : '';
+        const nav = urlAfter !== prevUrl ? `\nNavigated to: ${urlAfter}` : '';
         return textResponse(
           `Clicked [${normalizedHintId}]: "${result.label}"${nav}\nPage now has ${state.hintMap.length} elements. Call get_hint_map to see updated state.`
         );
       } catch (err) {
-        return errorResponse(`Click failed: ${err.message}`);
+        await audit('click_failed', `[${normalizedHintId}] ${err.message}`);
+        return buildStructuredError(`Click failed: ${err.message}`, normalizedHintId);
       }
     }
   );
@@ -210,21 +243,42 @@ export function registerTools(server, state) {
     },
     async ({ hint_id }) => {
       const page = await getActivePage();
-      try {
-        const normalizedHintId = hint_id.toUpperCase();
-        const urlBefore = page.url();
-        const rebuildHints = createRebuildHints(page, state);
-        const result = await clickByHintId(page, normalizedHintId, { rebuildHints });
-        audit('confirm_click', `[${normalizedHintId}] "${result.label}"`);
-        await syncPageState(page, state, { force: true });
+      const normalizedHintId = hint_id.toUpperCase();
+      const rebuildHints = createRebuildHints(page, state);
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = state.lastUrl;
+      const prevActiveId = await getActiveHintId(page);
 
+      try {
+        const result = await clickByHintId(page, normalizedHintId, { rebuildHints });
+        await syncPageState(page, state, { force: true });
+        const verification = await verifyGenericAction({
+          page,
+          hintId: normalizedHintId,
+          prevDomRevision,
+          prevUrl,
+          prevActiveId,
+          newDomRevision: state.pageState.domRevision,
+        });
+
+        if (!verification.ok) {
+          await audit('confirm_click_failed', `[${normalizedHintId}] ${verification.error_code}`);
+          return buildStructuredError(
+            `Confirm click verification failed for [${normalizedHintId}]`,
+            normalizedHintId,
+            verification
+          );
+        }
+
+        await audit('confirm_click', `[${normalizedHintId}] "${result.label}"`);
         const urlAfter = page.url();
-        const nav = urlAfter !== urlBefore ? `\nNavigated to: ${urlAfter}` : '';
+        const nav = urlAfter !== prevUrl ? `\nNavigated to: ${urlAfter}` : '';
         return textResponse(
           `Force-clicked [${normalizedHintId}]: "${result.label}"${nav}\nPage now has ${state.hintMap.length} elements.`
         );
       } catch (err) {
-        return errorResponse(`confirm_click failed: ${err.message}`);
+        await audit('confirm_click_failed', `[${normalizedHintId}] ${err.message}`);
+        return buildStructuredError(`confirm_click failed: ${err.message}`, normalizedHintId);
       }
     }
   );
@@ -241,7 +295,6 @@ export function registerTools(server, state) {
     },
     async ({ hint_id, text, press_enter = false }) => {
       const page = await getActivePage();
-
       const normalizedHintId = hint_id.toUpperCase();
       const rebuildHints = createRebuildHints(page, state);
 
@@ -251,14 +304,10 @@ export function registerTools(server, state) {
         if (!verdict.ok) {
           await audit('type_failed', `[${normalizedHintId}] ${verdict.error_code}`);
           await syncPageState(page, state, { force: true });
-          return errorResponse(
+          return buildStructuredError(
             `Type verification failed for [${normalizedHintId}]`,
-            {
-              error_code: verdict.error_code,
-              retryable: verdict.retryable,
-              suggested_next_step: verdict.suggested_next_step,
-              evidence: verdict.evidence,
-            }
+            normalizedHintId,
+            verdict
           );
         }
 
@@ -270,12 +319,15 @@ export function registerTools(server, state) {
         );
       } catch (err) {
         await audit('type_failed', `[${normalizedHintId}] ${err.message}`);
-        return errorResponse(
+        await syncPageState(page, state, { force: true });
+        return buildStructuredError(
           `Type failed: ${err.message}`,
+          normalizedHintId,
           {
             error_code: TYPE_FAILED,
             retryable: true,
             suggested_next_step: 'retry',
+            evidence: { hint_id: normalizedHintId, reason: err.message },
           }
         );
       }
@@ -468,13 +520,37 @@ export function registerTools(server, state) {
       inputSchema: { key: z.string().describe('Key or shortcut, e.g. "Enter", "Control+Enter"') },
     },
     async ({ key }) => {
+      const page = await getActivePage();
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = state.lastUrl;
+      const prevActiveId = await getActiveHintId(page);
+
       try {
-        const page = await getActivePage();
         await pressKey(page, key);
+        await syncPageState(page, state, { force: true });
+        const verification = await verifyGenericAction({
+          page,
+          hintId: null,
+          prevDomRevision,
+          prevUrl,
+          prevActiveId,
+          newDomRevision: state.pageState.domRevision,
+        });
+
+        if (!verification.ok) {
+          await audit('press_key_failed', `[${key}] ${verification.error_code}`);
+          return buildStructuredError(
+            `Press key verification failed for ${key}`,
+            key,
+            verification
+          );
+        }
+
         audit('press_key', key);
         return textResponse(`Pressed: ${key}`);
       } catch (err) {
-        return errorResponse(`press_key failed: ${err.message}`);
+        await audit('press_key_failed', key);
+        return buildStructuredError(`press_key failed: ${err.message}`, key);
       }
     }
   );
@@ -592,17 +668,56 @@ export function registerTools(server, state) {
       inputSchema: { hint_id: z.string().describe('Hint Map ID to hover over, e.g. B1, L3') },
     },
     async ({ hint_id }) => {
+      const page = await getActivePage();
+      const normalizedHintId = hint_id.toUpperCase();
+      const rebuildHints = createRebuildHints(page, state);
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = state.lastUrl;
+      const prevActiveId = await getActiveHintId(page);
+
       try {
-        const page = await getActivePage();
-        const rebuildHints = createRebuildHints(page, state);
-        const result = await hoverByHintId(page, hint_id.toUpperCase(), { rebuildHints });
-        audit('hover', `[${hint_id.toUpperCase()}] "${result.label}"`);
+        const result = await hoverByHintId(page, normalizedHintId, { rebuildHints });
         await syncPageState(page, state, { force: true });
+        const verification = await verifyGenericAction({
+          page,
+          hintId: normalizedHintId,
+          prevDomRevision,
+          prevUrl,
+          prevActiveId,
+          newDomRevision: state.pageState.domRevision,
+        });
+
+        if (!verification.ok) {
+          await audit('hover_failed', `[${normalizedHintId}] ${verification.error_code}`);
+          return buildStructuredError(
+            `Hover verification failed for [${normalizedHintId}]`,
+            normalizedHintId,
+            verification
+          );
+        }
+
+        audit('hover', `[${normalizedHintId}] "${result.label}"`);
+        const urlAfter = page.url();
+        const nav = urlAfter !== prevUrl ? `\nNavigated to: ${urlAfter}` : '';
         return textResponse(
-          `Hovered over [${hint_id.toUpperCase()}]: "${result.label}". ${state.hintMap.length} elements now visible.`
+          `Hovered over [${normalizedHintId}]: "${result.label}".${nav}\n${state.hintMap.length} elements now visible.`
         );
       } catch (err) {
-        return errorResponse(`hover failed: ${err.message}`);
+        await audit('hover_failed', `[${normalizedHintId}] ${err.message}`);
+        await syncPageState(page, state, { force: true });
+        return buildStructuredError(
+          `hover failed: ${err.message}`,
+          normalizedHintId,
+          {
+            error_code: TYPE_FAILED,
+            retryable: true,
+            suggested_next_step: 'retry',
+            evidence: {
+              hint_id: normalizedHintId,
+              reason: err.message,
+            },
+          }
+        );
       }
     }
   );

@@ -1,6 +1,6 @@
 {
   "name": "grasp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Give AI its own browser. A local MCP server for full Chrome control via CDP.",
   "main": "index.js",
   "bin": {

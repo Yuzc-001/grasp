@@ -4,7 +4,7 @@ All notable changes to Grasp are documented here.
 
 ---
 
-## v0.2.0 — Unreleased
+## v0.2.0 — 2026-03-19
 
 ### Added
 - Native `node:test` harness plus fake browser/page helpers, so runtime behavior can be verified without a live Chrome session

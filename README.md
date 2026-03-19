@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.1.1-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.2.0-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#install)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -13,9 +13,7 @@
 
 Grasp is an open-source MCP server for browser automation. It runs entirely on your machine, connects to a dedicated `chrome-grasp` profile, and gives AI agents full browser control — navigation, interaction, and observation — with no cloud dependency and no interference with your personal browsing.
 
-**Current release:** `v0.1.1`
-
-Branch note: the tool list below also documents the in-progress `v0.2.0` runtime and scheduler additions on this branch.
+**Current release:** `v0.2.0`
 
 ---
 

@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.1.1-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.2.0-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.zh-CN.md#安装)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -13,9 +13,7 @@
 
 Grasp 是一个开源 MCP Server，专为浏览器自动化而生。完全本地运行，连接专属的 `chrome-grasp` profile，赋予 AI Agent 完整的浏览器控制能力——导航、交互、感知——零云依赖，不干扰你的个人浏览。
 
-**当前版本：** `v0.1.1`
-
-分支说明：下方工具列表同时记录了这个分支正在推进的 `v0.2.0` 稳定性与调度层能力。
+**当前版本：** `v0.2.0`
 
 ---
 

@@ -7,8 +7,37 @@ import { syncPageState } from '../state.js';
 import { rebindHintCandidate } from '../../layer2-perception/hints.js';
 import { NO_EFFECT, LOADING_PENDING, EXECUTION_FAILED } from '../error-codes.js';
 
+const INPUT_HINT_TYPES = new Set(['searchbox', 'textbox', 'combobox', 'input', 'textarea']);
+
+function isInputLikeHint(hint = {}) {
+  if (INPUT_HINT_TYPES.has(hint.type)) return true;
+  if (hint.meta?.contenteditable === true || hint.meta?.contenteditable === 'true') return true;
+  if (hint.meta?.tag === 'input' || hint.meta?.tag === 'textarea') return true;
+  return false;
+}
+
+function hydrateHintCandidate(candidate, snapshot) {
+  if (!candidate?.id) return candidate ?? null;
+  const fullHint = (snapshot?.hints ?? []).find((hint) => hint.id === candidate.id);
+  return fullHint ? { ...fullHint, ...candidate, meta: { ...(fullHint.meta ?? {}), ...(candidate.meta ?? {}) } } : candidate;
+}
+
+function resolveSearchHint(snapshot, frame) {
+  const ranked = snapshot?.ranking?.search_input ?? [];
+  const rankedCandidate = ranked
+    .map((hint) => hydrateHintCandidate(hint, snapshot))
+    .find(isInputLikeHint);
+  if (rankedCandidate) return rankedCandidate;
+
+  const boundId = frame.semanticBindings.get('search_input');
+  const boundHint = (snapshot?.hints ?? []).find((hint) => hint.id === boundId);
+  if (isInputLikeHint(boundHint)) return boundHint;
+
+  return (snapshot?.hints ?? []).find(isInputLikeHint) ?? null;
+}
+
 function chooseSearchPlan(snapshot, frame) {
-  const searchHint = (snapshot?.ranking?.search_input ?? [])[0];
+  const searchHint = resolveSearchHint(snapshot, frame);
   const submitHint = snapshot?.submitCandidate;
   let mode = 'primary_submit';
   if (frame.nextRecovery === 'alternate_submit') {

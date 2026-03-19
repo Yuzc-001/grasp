@@ -15,6 +15,28 @@ test('rankAffordances prefers chat-like search input over command menu trigger',
   assert.equal(ranked.search_input[0].id, 'I1');
 });
 
+test('rankAffordances prefers contenteditable surfaces over search buttons', () => {
+  const ranked = rankAffordances({
+    hints: [
+      {
+        id: 'B2',
+        type: 'button',
+        label: '搜索',
+        meta: { tag: 'div', contenteditable: false },
+      },
+      {
+        id: 'I1',
+        type: 'div',
+        label: 'div',
+        meta: { tag: 'div', contenteditable: true },
+      },
+    ],
+  });
+
+  assert.equal(ranked.search_input[0].id, 'I1');
+  assert.equal(ranked.search_input.some((hint) => hint.id === 'B2'), false);
+});
+
 test('extractMainContent prefers main-like container over full body text', async () => {
   const page = createFakePage({
     evaluate: async () => ({

@@ -147,9 +147,11 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
     const results = [];
 
     for (const { el, tag, role, cx, cy } of filtered) {
+      const isContentEditable = el.getAttribute('contenteditable') === 'true' ||
+        el.getAttribute('contenteditable') === '';
       // 8. 构建 label（先于指纹计算）
       const label = getLabel(el, tag);
-      const type = role || tag;
+      const type = isContentEditable && !role ? 'textbox' : (role || tag);
       const prefix = getPrefix(tag, role, el);
 
       // 9. 查指纹注册表，命中则复用 ID，未命中则分配新 ID
@@ -169,6 +171,7 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
         idAttr: el.getAttribute('id') ?? '',
         ariaLabel: el.getAttribute('aria-label') ?? '',
         placeholder: el.getAttribute('placeholder') ?? '',
+        contenteditable: isContentEditable,
         role,
         tag,
       };

@@ -1,5 +1,12 @@
 const SEARCH_KEYWORDS = /search|搜索|提问|ask|query/i;
-const INPUT_TYPES = new Set(['searchbox', 'textbox', 'combobox']);
+const INPUT_TYPES = new Set(['searchbox', 'textbox', 'combobox', 'input', 'textarea']);
+
+function isInputLikeHint(hint = {}) {
+  if (INPUT_TYPES.has(hint.type)) return true;
+  if (hint.meta?.contenteditable === true || hint.meta?.contenteditable === 'true') return true;
+  if (hint.meta?.tag === 'input' || hint.meta?.tag === 'textarea') return true;
+  return false;
+}
 
 function gatherHintText(hint) {
   return [
@@ -13,8 +20,9 @@ function gatherHintText(hint) {
 }
 
 function scoreSearchInput(hint) {
+  if (!isInputLikeHint(hint)) return 0;
   let score = 0;
-  if (INPUT_TYPES.has(hint.type)) score += 5;
+  if (isInputLikeHint(hint)) score += 5;
   if (SEARCH_KEYWORDS.test(hint.label ?? '')) score += 5;
   if (SEARCH_KEYWORDS.test(gatherHintText(hint))) score += 3;
   return score;

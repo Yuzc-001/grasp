@@ -5,7 +5,7 @@
 
 ---
 
-## Current release: v0.1.0
+## Current release: v0.2.0
 
 Core MCP server, Hint Map, real-event execution, CLI, and AI client auto-configuration.
 

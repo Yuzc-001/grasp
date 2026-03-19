@@ -5,7 +5,7 @@ import { registerTools } from './tools.js';
 
 export const SERVER_INFO = {
   name: 'grasp',
-  version: '0.1.0',
+  version: '0.2.0',
 };
 
 export function createGraspServer() {

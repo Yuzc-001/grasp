@@ -133,8 +133,8 @@ test('runSearchTaskTool executes real actions through provided dependencies', as
       observer: async () => ({
         snapshot: {
           query: 'pi agent 是啥',
-          hints: [{ id: 'I1', semantic: 'search_input' }],
-          ranking: { search_input: [{ id: 'I1' }], command_button: [] },
+          hints: [{ id: 'I1', type: 'textbox', label: 'Ask Grok', meta: { tag: 'input' }, semantic: 'search_input' }],
+          ranking: { search_input: [{ id: 'I1', type: 'textbox', label: 'Ask Grok', meta: { tag: 'input' } }], command_button: [] },
           content: { text: '' },
           domRevision: 0,
           url: 'https://example.com/',
@@ -174,11 +174,11 @@ test('runSearchTaskTool counts actual action invocations across retries', async 
         snapshot: {
           query: 'pi agent 是啥',
           hints: [
-            { id: 'I1', semantic: 'search_input' },
+            { id: 'I1', type: 'textbox', label: 'Ask Grok', meta: { tag: 'input' }, semantic: 'search_input' },
             { id: 'B9', semantic: 'submit_control' },
           ],
           ranking: {
-            search_input: [{ id: 'I1' }],
+            search_input: [{ id: 'I1', type: 'textbox', label: 'Ask Grok', meta: { tag: 'input' } }],
             command_button: [{ id: 'B9' }],
           },
           submitCandidate: { id: 'B9' },
@@ -218,4 +218,58 @@ test('runSearchTaskTool counts actual action invocations across retries', async 
   });
   assert.equal(result.toolCalls, 3);
   assert.equal(result.retries, 1);
+});
+
+test('runSearchTaskTool falls back to a real input when observer ranking points at a button', async () => {
+  const state = createServerState();
+  let typed = 0;
+  const typedHintIds = [];
+  const page = createFakePage({
+    evaluate: async (fn, ...args) => {
+      const str = fn.toString();
+      if (str.includes('document.readyState')) return 'complete';
+      return fn(...args);
+    },
+  });
+
+  const result = await runSearchTaskTool({
+    state,
+    query: 'ai agent',
+    max_attempts: 2,
+    deps: {
+      getActivePage: async () => page,
+      observer: async () => ({
+        snapshot: {
+          query: 'ai agent',
+          hints: [
+            { id: 'B2', type: 'button', label: '搜索', meta: { tag: 'div', contenteditable: false } },
+            { id: 'I1', type: 'div', label: 'div', meta: { tag: 'div', contenteditable: true } },
+          ],
+          ranking: {
+            search_input: [{ id: 'B2', type: 'button', label: '搜索', meta: { tag: 'div', contenteditable: false } }],
+            command_button: [{ id: 'B5', type: 'button', label: '提交' }],
+          },
+          content: { text: '' },
+          domRevision: 0,
+          url: 'https://grok.com/',
+          submitCandidate: { id: 'B5', type: 'button', label: '提交' },
+        },
+      }),
+      verifier: async () => ({ ok: false, error_code: 'NO_EFFECT' }),
+      typeAction: async (_page, hintId) => {
+        typed += 1;
+        typedHintIds.push(hintId);
+      },
+      clickAction: async () => undefined,
+      pressKeyAction: async () => undefined,
+      waitStableAction: async () => ({ stable: true, attempts: 1 }),
+      extractContentAction: async () => ({ text: '' }),
+      syncStateAction: async () => undefined,
+    },
+  });
+
+  assert.equal(typed, 2);
+  assert.deepStrictEqual(typedHintIds, ['I1', 'I1']);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.toolCalls, 3);
 });

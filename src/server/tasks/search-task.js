@@ -43,18 +43,37 @@ function applyRecovery(frame, verdict) {
   }
 }
 
+function countExecutionToolCalls(execution) {
+  if (!execution) return 0;
+  if (typeof execution.toolCalls === 'number') {
+    return execution.toolCalls;
+  }
+  return 0;
+}
+
 function finalizeResult(frame, status, plan, verdict) {
   const attempts = status === 'failed' ? frame.attempts : frame.attempts + 1;
-  const toolCalls = frame.history.filter((entry) => entry.execution).length;
+  const toolCalls = frame.history.reduce(
+    (sum, entry) => sum + countExecutionToolCalls(entry.execution),
+    0
+  );
+  const recovered = status === 'completed' && frame.history.slice(0, -1).some((entry) => entry.verdict && !entry.verdict.ok);
   return {
+    taskId: frame.taskId,
     status,
     attempts,
     toolCalls,
-    retries: Math.max(frame.attempts, 0),
+    retries: Math.max(attempts - 1, 0),
     plan,
     verdict,
     frame,
+    recovered,
   };
+}
+
+function stripTrace(result) {
+  const { frame, ...publicResult } = result;
+  return publicResult;
 }
 
 function createRebuildHints(page, state) {
@@ -105,7 +124,7 @@ async function verifySearchOutcome({
   return { ok: false, error_code: NO_EFFECT, evidence };
 }
 
-export async function runSearchTask({
+async function executeSearchTask({
   query,
   observer,
   executor,
@@ -152,6 +171,11 @@ export async function runSearchTask({
   return finalizeResult(frame, 'failed', null, null);
 }
 
+export async function runSearchTask(options) {
+  const result = await executeSearchTask(options);
+  return stripTrace(result);
+}
+
 export async function runSearchTaskTool({
   state,
   query,
@@ -196,32 +220,39 @@ export async function runSearchTaskTool({
   let executor = executorOverride;
   if (!executor) {
     executor = async (plan) => {
-    if (!plan.searchInputHintId) {
-      return { ok: false, error_code: EXECUTION_FAILED };
-    }
-    try {
-      if (plan.mode === 'primary_submit') {
-        await typeAction(page, plan.searchInputHintId, query, true, { rebuildHints });
-      } else if (plan.mode === 'alternate_submit') {
-        await typeAction(page, plan.searchInputHintId, query, false, { rebuildHints });
-        if (plan.submitHintId) {
-          await clickAction(page, plan.submitHintId, { rebuildHints });
+      if (!plan.searchInputHintId) {
+        return { ok: false, error_code: EXECUTION_FAILED };
+      }
+      let actionCount = 0;
+      try {
+        if (plan.mode === 'primary_submit') {
+          await typeAction(page, plan.searchInputHintId, query, true, { rebuildHints });
+          actionCount += 1;
+        } else if (plan.mode === 'alternate_submit') {
+          await typeAction(page, plan.searchInputHintId, query, false, { rebuildHints });
+          actionCount += 1;
+          if (plan.submitHintId) {
+            await clickAction(page, plan.submitHintId, { rebuildHints });
+            actionCount += 1;
+          } else {
+            await pressKeyAction(page, 'Enter');
+            actionCount += 1;
+          }
         } else {
           await pressKeyAction(page, 'Enter');
+          actionCount += 1;
         }
-      } else {
-        await pressKeyAction(page, 'Enter');
+        await syncStateAction(page, state, { force: true });
+        return { ok: true, toolCalls: actionCount };
+      } catch (err) {
+        return {
+          ok: false,
+          error_code: EXECUTION_FAILED,
+          toolCalls: actionCount,
+          evidence: { message: err.message },
+        };
       }
-      await syncStateAction(page, state, { force: true });
-      return { ok: true };
-    } catch (err) {
-      return {
-        ok: false,
-        error_code: EXECUTION_FAILED,
-        evidence: { message: err.message },
-      };
-    }
-  };
+    };
   }
 
   let verifier = verifierOverride;
@@ -246,7 +277,7 @@ export async function runSearchTaskTool({
     };
   }
 
-  const result = await runSearchTask({
+  const result = await executeSearchTask({
     query,
     observer,
     executor,
@@ -257,5 +288,5 @@ export async function runSearchTaskTool({
   });
 
   state.taskFrames.set(result.frame.taskId, result.frame);
-  return result;
+  return stripTrace(result);
 }

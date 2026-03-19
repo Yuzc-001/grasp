@@ -15,6 +15,7 @@ test('search task uses search_input then verifies result region', async () => {
   });
 
   assert.equal(result.status, 'completed');
+  assert.equal('frame' in result, false);
 });
 
 test('search task falls back after wrong affordance or no effect', async () => {
@@ -92,6 +93,26 @@ test('search task waits and reverifies before failing a loading page', async () 
   assert.equal(waits.length, 1);
 });
 
+test('search task failure still exposes stable benchmark fields', async () => {
+  const result = await runSearchTask({
+    query: 'pi agent 是啥',
+    observer: async () => ({
+      snapshot: { hints: [{ id: 'I1', semantic: 'search_input' }] },
+    }),
+    executor: async () => ({ ok: true, toolCalls: 1 }),
+    verifier: async () => ({ ok: false, error_code: 'NO_EFFECT' }),
+    maxAttempts: 3,
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.attempts, 3);
+  assert.equal(result.toolCalls, 3);
+  assert.equal(result.retries, 2);
+  assert.equal(result.recovered, false);
+  assert.equal('history' in result, false);
+  assert.equal('frame' in result, false);
+});
+
 test('runSearchTaskTool executes real actions through provided dependencies', async () => {
   const state = createServerState();
   let typed = 0;
@@ -131,4 +152,70 @@ test('runSearchTaskTool executes real actions through provided dependencies', as
 
   assert(result.status === 'completed');
   assert(typed > 0);
+  assert.equal(typeof result.taskId, 'string');
+  assert.equal('frame' in result, false);
+  assert.equal('history' in result, false);
+  assert.equal(result.toolCalls, 1);
+});
+
+test('runSearchTaskTool counts actual action invocations across retries', async () => {
+  const state = createServerState();
+  let verifyCount = 0;
+  const actionBreakdown = { type: 0, click: 0, pressKey: 0, typeWithEnter: 0 };
+  const page = createFakePage();
+
+  const result = await runSearchTaskTool({
+    state,
+    query: 'pi agent 是啥',
+    max_attempts: 3,
+    deps: {
+      getActivePage: async () => page,
+      observer: async () => ({
+        snapshot: {
+          query: 'pi agent 是啥',
+          hints: [
+            { id: 'I1', semantic: 'search_input' },
+            { id: 'B9', semantic: 'submit_control' },
+          ],
+          ranking: {
+            search_input: [{ id: 'I1' }],
+            command_button: [{ id: 'B9' }],
+          },
+          submitCandidate: { id: 'B9' },
+          content: { text: '' },
+          domRevision: 0,
+          url: 'https://example.com/',
+        },
+      }),
+      verifier: async ({ plan }) => {
+        verifyCount += 1;
+        return verifyCount === 1 && plan.mode === 'primary_submit'
+          ? { ok: false, error_code: 'NO_EFFECT' }
+          : { ok: true, evidence: { answerStarted: true } };
+      },
+      typeAction: async (_page, _hintId, _text, pressEnter) => {
+        actionBreakdown.type += 1;
+        if (pressEnter) actionBreakdown.typeWithEnter += 1;
+      },
+      clickAction: async () => {
+        actionBreakdown.click += 1;
+      },
+      pressKeyAction: async () => {
+        actionBreakdown.pressKey += 1;
+      },
+      syncStateAction: async () => undefined,
+      waitStableAction: async () => ({ stable: true, attempts: 1 }),
+      extractContentAction: async () => ({ text: 'after' }),
+    },
+  });
+
+  assert.equal(result.status, 'completed');
+  assert.deepStrictEqual(actionBreakdown, {
+    type: 2,
+    click: 1,
+    pressKey: 0,
+    typeWithEnter: 1,
+  });
+  assert.equal(result.toolCalls, 3);
+  assert.equal(result.retries, 1);
 });

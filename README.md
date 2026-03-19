@@ -15,6 +15,8 @@ Grasp is an open-source MCP server for browser automation. It runs entirely on y
 
 **Current release:** `v0.1.1`
 
+Branch note: the tool list below also documents the in-progress `v0.2.0` runtime and scheduler additions on this branch.
+
 ---
 
 ## Design
@@ -104,6 +106,8 @@ args    = ["-y", "grasp"]
 | `navigate` | Navigate to URL, auto-detect WebMCP |
 | `get_status` | Connection state, current page, execution mode |
 | `get_page_summary` | Title, URL, visible text (first 2000 chars) |
+| `wait_until_stable` | Wait for repeated page snapshots to stop changing |
+| `extract_main_content` | Extract focused main/article text from the current page |
 | `screenshot` | Capture current viewport (base64) |
 
 ### Interaction
@@ -112,6 +116,7 @@ args    = ["-y", "grasp"]
 |:---|:---|
 | `get_hint_map` | Scan viewport, return semantic map |
 | `get_form_fields` | Identify form fields, aligned with hint map IDs |
+| `search_affordances` | Rank the current page's search-friendly inputs and submit controls |
 | `click` | Click by hint ID; high-risk actions intercepted |
 | `confirm_click` | Force-click a high-risk element |
 | `type` | Type text keystroke-by-keystroke |
@@ -119,6 +124,12 @@ args    = ["-y", "grasp"]
 | `scroll` | Scroll up or down with real wheel events |
 | `press_key` | Send keyboard shortcuts |
 | `watch_element` | Watch a CSS selector for DOM changes |
+
+### Task Schedulers
+
+| Tool | Description |
+|:---|:---|
+| `search_task` | Run a verified search workflow with bounded recovery and stable metrics (`attempts`, `toolCalls`, `retries`, `recovered`) |
 
 ### Tabs
 
@@ -146,6 +157,19 @@ args    = ["-y", "grasp"]
 | `GRASP_SAFE_MODE` | `true` | Intercept high-risk actions before execution |
 
 Persistent config at `~/.grasp/config.json`.
+
+## Recovery Semantics
+
+Interactive tools now surface structured failures through response metadata:
+
+- `error_code` identifies the failure class (`CDP_UNREACHABLE`, `STALE_HINT`, `ACTION_NOT_VERIFIED`, and friends)
+- `retryable` tells the caller whether bounded recovery is safe
+- `suggested_next_step` points to the next move (`retry`, `reobserve`, `wait_then_reverify`)
+- `evidence` includes the page-level details used by the verifier
+
+The `search_task` scheduler builds on the same contract and returns stable benchmark fields directly in the tool result. `toolCalls` counts scheduler action steps (`type`, `click`, `press_key`) rather than state-sync internals, while `recovered` indicates that a bounded recovery path was needed.
+
+Benchmark smoke scenarios and reporting rules live in [docs/benchmarks/search-benchmark.md](./docs/benchmarks/search-benchmark.md).
 
 ---
 

@@ -4,6 +4,23 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.2.0 — Unreleased
+
+### Added
+- Native `node:test` harness plus fake browser/page helpers, so runtime behavior can be verified without a live Chrome session
+- CDP connection watchdog with persisted runtime status, allowing `grasp status` to distinguish `connected`, `disconnected`, and `CDP_UNREACHABLE`
+- Same-URL DOM revision tracking and stale-hint self-healing for dynamic overlays and remount-heavy pages
+- Post-action verifiers, structured error envelopes, and failure audit events for `click`, `type`, `hover`, `press_key`, and higher-level task tools
+- `wait_until_stable`, `extract_main_content`, and `search_affordances` for more reliable reading and task planning
+- `search_task`, a thin search scheduler that applies bounded recovery (`alternate_submit`, `wait_then_reverify`, `reobserve`) and exposes benchmark-ready metrics
+- Local benchmark runner and scenario docs for comparing success rate, tool calls, retries, and recovery success across scheduler iterations
+
+### Changed
+- `grasp status` now reports the effective runtime safe-mode value and the latest watchdog state instead of only static config
+- Search-style automation is now documented as a verified workflow rather than an ad-hoc sequence of raw low-level tool calls
+
+---
+
 ## v0.1.1 — 2026-03-18
 
 ### Added

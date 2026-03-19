@@ -15,6 +15,8 @@ Grasp 是一个开源 MCP Server，专为浏览器自动化而生。完全本地
 
 **当前版本：** `v0.1.1`
 
+分支说明：下方工具列表同时记录了这个分支正在推进的 `v0.2.0` 稳定性与调度层能力。
+
 ---
 
 ## 设计理念
@@ -104,6 +106,8 @@ args    = ["-y", "grasp"]
 | `navigate` | 导航到 URL，自动探测 WebMCP |
 | `get_status` | 连接状态、当前页面、执行模式 |
 | `get_page_summary` | 标题、URL、可见文字（前 2000 字） |
+| `wait_until_stable` | 等待页面快照连续稳定后再继续读取 |
+| `extract_main_content` | 提取当前页面更聚焦的主内容 / 正文 |
 | `screenshot` | 截取当前视口（base64） |
 
 ### 交互
@@ -112,6 +116,7 @@ args    = ["-y", "grasp"]
 |:---|:---|
 | `get_hint_map` | 扫描视口，返回语义地图 |
 | `get_form_fields` | 识别表单字段，ID 与 hint map 对齐 |
+| `search_affordances` | 对当前页面的搜索输入框和提交控件做排序 |
 | `click` | 按 Hint ID 点击；高危操作自动拦截 |
 | `confirm_click` | 强制点击高危元素 |
 | `type` | 逐键盘事件输入文字 |
@@ -119,6 +124,12 @@ args    = ["-y", "grasp"]
 | `scroll` | 真实 wheel 事件滚动 |
 | `press_key` | 发送键盘快捷键 |
 | `watch_element` | 监听 CSS 选择器对应元素的 DOM 变化 |
+
+### 任务调度
+
+| 工具 | 说明 |
+|:---|:---|
+| `search_task` | 运行带有有界恢复的搜索工作流，并稳定返回 `attempts`、`toolCalls`、`retries`、`recovered` 等指标 |
 
 ### 标签页
 
@@ -146,6 +157,19 @@ args    = ["-y", "grasp"]
 | `GRASP_SAFE_MODE` | `true` | 执行前拦截高危操作 |
 
 持久化配置存储在 `~/.grasp/config.json`。
+
+## 恢复语义
+
+交互工具现在会通过结构化 `meta` 返回失败信息：
+
+- `error_code`：失败类型，例如 `CDP_UNREACHABLE`、`STALE_HINT`、`ACTION_NOT_VERIFIED`
+- `retryable`：调用方是否可以安全地做有界重试
+- `suggested_next_step`：建议下一步动作，例如 `retry`、`reobserve`、`wait_then_reverify`
+- `evidence`：验证器判断时使用的页面证据
+
+`search_task` 调度器建立在同一套约定之上，并直接返回稳定的 benchmark 字段。其中 `toolCalls` 统计的是调度层实际触发的 `type` / `click` / `press_key` 动作步数，不包含状态同步；`recovered` 则表示流程中确实走到了有界恢复路径。
+
+benchmark 的 smoke 场景和口径说明见 [docs/benchmarks/search-benchmark.md](./docs/benchmarks/search-benchmark.md)。
 
 ---
 

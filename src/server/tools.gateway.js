@@ -13,6 +13,33 @@ function toGatewayPage(outcome, state) {
   };
 }
 
+function buildGatewayOutcome(outcome) {
+  const strategy = outcome.preflight?.recommended_entry_strategy ?? 'direct';
+  const trust = outcome.preflight?.session_trust ?? 'medium';
+
+  if (strategy === 'handoff_or_preheat') {
+    return {
+      status: 'gated',
+      canContinue: false,
+      suggestedNextAction: outcome.pageState?.riskGateDetected ? 'request_handoff' : 'preheat_session',
+    };
+  }
+
+  if (strategy === 'preheat_before_direct_entry' || trust === 'low') {
+    return {
+      status: 'warmup',
+      canContinue: true,
+      suggestedNextAction: 'preheat_session',
+    };
+  }
+
+  return {
+    status: 'direct',
+    canContinue: true,
+    suggestedNextAction: 'inspect',
+  };
+}
+
 export function registerGatewayTools(server, state, deps = {}) {
   const enter = deps.enterWithStrategy ?? enterWithStrategy;
 
@@ -26,13 +53,14 @@ export function registerGatewayTools(server, state, deps = {}) {
     },
     async ({ url }) => {
       const outcome = await enter({ url, state });
+      const gatewayOutcome = buildGatewayOutcome(outcome);
 
       return buildGatewayResponse({
-        status: outcome.pageState?.riskGateDetected ? 'gated' : 'direct',
+        status: gatewayOutcome.status,
         page: toGatewayPage(outcome, state),
         continuation: {
-          can_continue: !outcome.pageState?.riskGateDetected,
-          suggested_next_action: outcome.pageState?.riskGateDetected ? 'request_handoff' : 'inspect',
+          can_continue: gatewayOutcome.canContinue,
+          suggested_next_action: gatewayOutcome.suggestedNextAction,
           handoff_state: state.handoff?.state ?? 'idle',
         },
         evidence: { strategy: outcome.preflight ?? null },

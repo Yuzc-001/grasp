@@ -45,7 +45,11 @@ test('entry marks low-trust preheat outcomes as warmup', async () => {
 test('entry marks handoff or preheat outcomes as gated', async () => {
   const calls = [];
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
-  const state = { pageState: { currentRole: 'checkpoint', graspConfidence: 'low', riskGateDetected: true }, handoff: { state: 'idle' } };
+  const state = {
+    lastUrl: 'https://example.com/current',
+    pageState: { currentRole: 'checkpoint', graspConfidence: 'low', riskGateDetected: true },
+    handoff: { state: 'idle' },
+  };
 
   registerGatewayTools(server, state, {
     enterWithStrategy: async () => ({ url: 'https://github.com', title: 'Just a moment', preflight: { session_trust: 'low', recommended_entry_strategy: 'handoff_or_preheat' }, pageState: state.pageState, handoff: { state: 'handoff_required' } }),
@@ -55,6 +59,7 @@ test('entry marks handoff or preheat outcomes as gated', async () => {
   const result = await entry.handler({ url: 'https://github.com' });
 
   assert.equal(result.meta.status, 'gated');
+  assert.equal(result.meta.page.url, 'https://example.com/current');
   assert.equal(result.meta.continuation.can_continue, false);
   assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
   assert.equal(result.meta.continuation.handoff_state, 'handoff_required');
@@ -114,7 +119,7 @@ test('extract returns summary, main text, and markdown in one payload', async ()
   assert.match(result.meta.result.markdown, /^# /);
 });
 
-test('inspect and extract mark checkpoint pages as gated with handoff guidance', async () => {
+test('inspect and extract block checkpoint pages with handoff guidance', async () => {
   const calls = [];
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
   const page = createFakePage({
@@ -142,15 +147,57 @@ test('inspect and extract mark checkpoint pages as gated with handoff guidance',
   const inspectResult = await inspect.handler();
   const extractResult = await extract.handler();
 
-  assert.equal(inspectResult.meta.status, 'gated');
+  assert.equal(inspectResult.meta.status, 'handoff_required');
   assert.equal(inspectResult.meta.continuation.can_continue, false);
   assert.equal(inspectResult.meta.continuation.suggested_next_action, 'request_handoff');
   assert.equal(inspectResult.meta.continuation.handoff_state, 'handoff_required');
 
-  assert.equal(extractResult.meta.status, 'gated');
+  assert.equal(extractResult.meta.status, 'handoff_required');
   assert.equal(extractResult.meta.continuation.can_continue, false);
   assert.equal(extractResult.meta.continuation.suggested_next_action, 'request_handoff');
   assert.equal(extractResult.meta.continuation.handoff_state, 'handoff_required');
+});
+
+test('inspect and extract stay blocked while handoff recovery is still in progress', async () => {
+  for (const handoffState of ['handoff_in_progress', 'awaiting_reacquisition']) {
+    const calls = [];
+    const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+    const page = createFakePage({
+      url: () => 'https://example.com/after-human-step',
+      title: () => 'Example',
+    });
+    const state = {
+      lastUrl: 'https://example.com/after-human-step',
+      pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: handoffState },
+    };
+
+    registerGatewayTools(server, state, {
+      getActivePage: async () => page,
+      syncPageState: async (_page, currentState) => {
+        currentState.pageState = state.pageState;
+        return currentState;
+      },
+      waitUntilStable: async () => ({ stable: true }),
+      extractMainContent: async () => ({ title: 'Example', text: 'Readable body that should stay blocked until resume.' }),
+    });
+
+    const inspect = calls.find((tool) => tool.name === 'inspect');
+    const extract = calls.find((tool) => tool.name === 'extract');
+
+    const inspectResult = await inspect.handler();
+    const extractResult = await extract.handler();
+
+    assert.equal(inspectResult.meta.status, 'handoff_required');
+    assert.equal(inspectResult.meta.continuation.can_continue, false);
+    assert.equal(inspectResult.meta.continuation.suggested_next_action, 'request_handoff');
+    assert.equal(inspectResult.meta.continuation.handoff_state, handoffState);
+
+    assert.equal(extractResult.meta.status, 'handoff_required');
+    assert.equal(extractResult.meta.continuation.can_continue, false);
+    assert.equal(extractResult.meta.continuation.suggested_next_action, 'request_handoff');
+    assert.equal(extractResult.meta.continuation.handoff_state, handoffState);
+  }
 });
 
 test('continue returns handoff guidance when the page is gated', async () => {

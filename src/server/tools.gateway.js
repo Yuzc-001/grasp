@@ -7,20 +7,33 @@ import { getActivePage } from '../layer1-bridge/chrome.js';
 import { syncPageState } from './state.js';
 import { enterWithStrategy } from './tools.strategy.js';
 
-function toGatewayPage({ title, url, pageState }, state) {
+function toGatewayPage({ title, url, pageState }, state, { preferCurrentUrl = false } = {}) {
+  const pageUrl = preferCurrentUrl
+    ? state.lastUrl ?? 'unknown'
+    : url ?? state.lastUrl ?? 'unknown';
+
   return {
     title: title ?? 'unknown',
-    url,
+    url: pageUrl,
     page_role: pageState?.currentRole ?? state.pageState?.currentRole ?? 'unknown',
     grasp_confidence: pageState?.graspConfidence ?? state.pageState?.graspConfidence ?? 'unknown',
     risk_gate: pageState?.riskGateDetected ?? state.pageState?.riskGateDetected ?? false,
   };
 }
 
+function isBlockedHandoffState(handoffState) {
+  return handoffState === 'handoff_required'
+    || handoffState === 'handoff_in_progress'
+    || handoffState === 'awaiting_reacquisition';
+}
+
 function getGatewayStatus(state) {
   const pageState = state.pageState ?? {};
   const handoffState = state.handoff?.state ?? 'idle';
-  if (handoffState === 'handoff_required' || pageState.riskGateDetected || pageState.currentRole === 'checkpoint') {
+  if (isBlockedHandoffState(handoffState)) {
+    return 'handoff_required';
+  }
+  if (pageState.riskGateDetected || pageState.currentRole === 'checkpoint') {
     return 'gated';
   }
   return 'direct';
@@ -28,7 +41,7 @@ function getGatewayStatus(state) {
 
 function getGatewayContinuation(state, suggestedNextAction) {
   const handoffState = state.handoff?.state ?? 'idle';
-  if (getGatewayStatus(state) === 'gated') {
+  if (getGatewayStatus(state) !== 'direct') {
     return {
       can_continue: false,
       suggested_next_action: 'request_handoff',
@@ -87,10 +100,11 @@ export function registerGatewayTools(server, state, deps = {}) {
     async ({ url }) => {
       const outcome = await enter({ url, state, deps: { auditName: 'entry' } });
       const gatewayOutcome = buildGatewayOutcome(outcome);
+      const preferCurrentUrl = outcome.preflight?.recommended_entry_strategy === 'handoff_or_preheat';
 
       return buildGatewayResponse({
         status: gatewayOutcome.status,
-        page: toGatewayPage(outcome, state),
+        page: toGatewayPage(outcome, state, { preferCurrentUrl }),
         continuation: {
           can_continue: gatewayOutcome.canContinue,
           suggested_next_action: gatewayOutcome.suggestedNextAction,

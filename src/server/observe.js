@@ -1,6 +1,23 @@
-import { extractMainContent, waitUntilStable } from './content.js';
+import { extractMainContent, summarizeExtractedText, toMarkdownDocument, waitUntilStable } from './content.js';
 import { rankAffordances } from './affordances.js';
 import { syncPageState } from './state.js';
+
+export async function extractObservedContent({ page, deps = {}, include_markdown = false } = {}) {
+  const waitStable = deps.waitStable ?? waitUntilStable;
+  const extractContent = deps.extractContent ?? extractMainContent;
+  await waitStable(page, { stableChecks: 3, interval: 200, timeout: 5000 });
+  const content = await extractContent(page);
+  const result = {
+    summary: summarizeExtractedText(content.text),
+    main_text: content.text,
+  };
+
+  if (include_markdown) {
+    result.markdown = toMarkdownDocument(content);
+  }
+
+  return result;
+}
 
 export async function observeSearchSnapshot({ page, state, query, frame, deps = {} }) {
   const waitStable = deps.waitStable ?? waitUntilStable;

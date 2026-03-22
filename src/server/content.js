@@ -2,6 +2,10 @@ const DEFAULT_STABLE_CHECKS = 3;
 const DEFAULT_INTERVAL = 200;
 const DEFAULT_TIMEOUT = 5000;
 
+function normalizeText(value) {
+  return String(value ?? '').trim();
+}
+
 async function defaultSnapshot(page) {
   return page.evaluate(() => {
     const safeText = (el) => (el?.innerText ?? '').trim();
@@ -24,6 +28,24 @@ export async function extractMainContent(page) {
     title,
     text: (text ?? '').trim(),
   };
+}
+
+export function summarizeExtractedText(text) {
+  const normalized = normalizeText(text).replace(/\s+/g, ' ');
+  if (!normalized) {
+    return '';
+  }
+
+  const sentenceMatch = normalized.match(/^(.+?)[.!?](?:\s|$)/);
+  if (sentenceMatch) {
+    return sentenceMatch[1].trim();
+  }
+
+  return normalized.length > 120 ? `${normalized.slice(0, 117).trimEnd()}...` : normalized;
+}
+
+export function toMarkdownDocument({ title, text }) {
+  return `# ${title || 'Untitled'}\n\n${text}`.trim();
 }
 
 export async function waitUntilStable(page, options = {}) {

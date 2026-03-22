@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createFakePage } from '../helpers/fake-page.js';
 import { registerGatewayTools } from '../../src/server/tools.gateway.js';
 
 test('entry returns a gateway response with strategy metadata', async () => {
@@ -57,4 +58,56 @@ test('entry marks handoff or preheat outcomes as gated', async () => {
   assert.equal(result.meta.continuation.can_continue, false);
   assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
   assert.equal(result.meta.continuation.handoff_state, 'handoff_required');
+});
+
+test('inspect returns current gateway page status without raw primitive wording', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const page = createFakePage({
+    url: () => 'https://example.com',
+    title: () => 'Example',
+  });
+  const state = { pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false }, handoff: { state: 'idle' } };
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+  });
+
+  const inspect = calls.find((tool) => tool.name === 'inspect');
+  const result = await inspect.handler();
+
+  assert.equal(result.meta.page.page_role, 'content');
+  assert.equal(result.meta.continuation.suggested_next_action, 'extract');
+  assert.doesNotMatch(result.content[0].text, /page_role|handoff_state|suggested_next_action/);
+});
+
+test('extract returns summary, main text, and markdown in one payload', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const page = createFakePage({
+    url: () => 'https://example.com',
+    title: () => 'Example',
+  });
+  const state = { pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false }, handoff: { state: 'idle' } };
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+    waitUntilStable: async () => ({ stable: true }),
+    extractMainContent: async () => ({ title: 'Example', text: 'Example summary. More body text.' }),
+  });
+
+  const extract = calls.find((tool) => tool.name === 'extract');
+  const result = await extract.handler({ include_markdown: true });
+
+  assert.equal(result.meta.result.summary, 'Example summary');
+  assert.equal(result.meta.result.main_text, 'Example summary. More body text.');
+  assert.match(result.meta.result.markdown, /^# /);
 });

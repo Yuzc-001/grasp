@@ -9,7 +9,7 @@ import {
   markResumeVerified,
   clearHandoff,
 } from '../../../src/grasp/handoff/events.js';
-import { assessResumeContinuation } from '../../../src/server/continuity.js';
+import { assessGatewayContinuation, assessResumeContinuation } from '../../../src/server/continuity.js';
 import { createFakePage } from '../../helpers/fake-page.js';
 
 test('handoff runtime path can move from request to verified resume', () => {
@@ -100,4 +100,34 @@ test('resume continuation can report readiness and next action when expected aff
   assert.equal(continuation.continuation_ready, true);
   assert.equal(continuation.suggested_next_action, 'use_hint_matching:Search');
   assert.equal(continuation.continuation_goal, 'continue docs search workflow');
+});
+
+test('gateway continuation reports resumed when handoff anchors match again', async () => {
+  const state = createServerState();
+  state.pageState = {
+    currentRole: 'docs',
+    reacquired: true,
+  };
+  state.hintMap = [
+    { id: 'B1', label: 'Search docs', type: 'button', x: 0, y: 0 },
+  ];
+
+  const page = createFakePage({
+    url: () => 'https://playwright.dev/docs/intro',
+    evaluate: async (_fn, selector) => selector === 'main',
+  });
+
+  state.handoff = requestHandoff(state.handoff, 'login_required', 'persist anchors', {
+    expected_url_contains: '/docs/intro',
+    expected_page_role: 'docs',
+    expected_selector: 'main',
+    continuation_goal: 'continue docs search workflow',
+    expected_hint_label: 'Search',
+  });
+  state.handoff = markResumeVerified(state.handoff, { url: page.url() }, 'resume confirmed');
+
+  const continuation = await assessGatewayContinuation(page, state);
+
+  assert.equal(continuation.status, 'resumed');
+  assert.equal(continuation.continuation.suggested_next_action, 'use_hint_matching:Search');
 });

@@ -16,6 +16,33 @@ import { readHandoffState, writeHandoffState } from '../grasp/handoff/persist.js
 import { capturePageEvidence } from '../grasp/verify/evidence.js';
 import { assessResumeContinuation } from './continuity.js';
 
+export function getHandoffContinuationAnchors(handoff = {}) {
+  return {
+    expected_url_contains: handoff.expected_url_contains ?? null,
+    expected_page_role: handoff.expected_page_role ?? null,
+    expected_selector: handoff.expected_selector ?? null,
+    continuation_goal: handoff.continuation_goal ?? null,
+    expected_hint_label: handoff.expected_hint_label ?? null,
+  };
+}
+
+export function shouldMarkResumeVerified({
+  verify = true,
+  checkpointStillPresent = false,
+  pageState = {},
+  continuation = {},
+}) {
+  if (!verify || checkpointStillPresent) return false;
+
+  const pageReacquired = !!pageState?.reacquired;
+  const taskVerified = continuation?.task_continuation_ok;
+  const continuationReady = continuation?.continuation_ready === true;
+
+  if (taskVerified === false) return false;
+
+  return pageReacquired || continuationReady;
+}
+
 export function registerHandoffTools(server, state) {
   server.registerTool(
     'request_handoff',
@@ -109,6 +136,7 @@ export function registerHandoffTools(server, state) {
       await syncPageState(page, state, { force: true });
       const currentHandoff = await readHandoffState();
       const anchors = {
+        ...getHandoffContinuationAnchors(currentHandoff),
         expected_url_contains: expected_url_contains ?? currentHandoff.expected_url_contains,
         expected_page_role: expected_page_role ?? currentHandoff.expected_page_role,
         expected_selector: expected_selector ?? currentHandoff.expected_selector,
@@ -132,9 +160,13 @@ export function registerHandoffTools(server, state) {
         },
       });
 
-      const pageVerified = !!state.pageState?.reacquired;
       const taskVerified = continuation.task_continuation_ok;
-      const shouldVerify = verify && pageVerified && (taskVerified !== false) && !checkpointStillPresent;
+      const shouldVerify = shouldMarkResumeVerified({
+        verify,
+        checkpointStillPresent,
+        pageState: state.pageState,
+        continuation: effectiveContinuation,
+      });
 
       if (shouldVerify) {
         state.handoff = markResumeVerified(currentHandoff, evidence, note ?? null);

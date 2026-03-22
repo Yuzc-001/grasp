@@ -152,3 +152,30 @@ test('inspect and extract mark checkpoint pages as gated with handoff guidance',
   assert.equal(extractResult.meta.continuation.suggested_next_action, 'request_handoff');
   assert.equal(extractResult.meta.continuation.handoff_state, 'handoff_required');
 });
+
+test('continue returns handoff guidance when the page is gated', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const page = createFakePage({
+    url: () => 'https://example.com/checkpoint',
+    title: () => 'Just a moment',
+  });
+  const state = {
+    pageState: { currentRole: 'checkpoint', graspConfidence: 'low', riskGateDetected: true },
+    handoff: { state: 'handoff_required' },
+  };
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+  });
+
+  const continueTool = calls.find((tool) => tool.name === 'continue');
+  const result = await continueTool.handler();
+
+  assert.equal(result.meta.status, 'handoff_required');
+  assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
+});

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { buildGatewayResponse } from './gateway-response.js';
 import { extractObservedContent } from './observe.js';
+import { assessGatewayContinuation } from './continuity.js';
 import { getActivePage } from '../layer1-bridge/chrome.js';
 import { syncPageState } from './state.js';
 import { enterWithStrategy } from './tools.strategy.js';
@@ -151,6 +152,29 @@ export function registerGatewayTools(server, state, deps = {}) {
         }, state),
         result,
         continuation: getGatewayContinuation(state, 'inspect'),
+      });
+    }
+  );
+
+  server.registerTool(
+    'continue',
+    {
+      description: 'Decide the next continuation step without triggering browser actions.',
+      inputSchema: {},
+    },
+    async () => {
+      const page = await getPage();
+      await syncState(page, state, { force: true });
+      const outcome = await assessGatewayContinuation(page, state);
+
+      return buildGatewayResponse({
+        status: outcome.status,
+        page: toGatewayPage({
+          title: await page.title(),
+          url: page.url(),
+          pageState: state.pageState,
+        }, state),
+        continuation: outcome.continuation,
       });
     }
   );

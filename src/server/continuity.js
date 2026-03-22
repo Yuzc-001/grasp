@@ -147,3 +147,93 @@ export async function assessResumeContinuation(page, state, anchors = {}) {
     checks,
   };
 }
+
+export async function assessGatewayContinuation(page, state) {
+  const handoffState = state?.handoff?.state ?? 'idle';
+  const pageState = state?.pageState ?? {};
+  const gatedByPage = pageState.currentRole === 'checkpoint' || pageState.riskGateDetected === true;
+  const anchors = {
+    expected_url_contains: state?.handoff?.expected_url_contains ?? null,
+    expected_page_role: state?.handoff?.expected_page_role ?? null,
+    expected_selector: state?.handoff?.expected_selector ?? null,
+    continuation_goal: state?.handoff?.continuation_goal ?? null,
+    expected_hint_label: state?.handoff?.expected_hint_label ?? null,
+  };
+
+  if (handoffState === 'handoff_required' || handoffState === 'handoff_in_progress' || handoffState === 'awaiting_reacquisition') {
+    return {
+      status: 'handoff_required',
+      continuation: {
+        can_continue: false,
+        suggested_next_action: 'request_handoff',
+        handoff_state: handoffState,
+      },
+    };
+  }
+
+  if (gatedByPage) {
+    return {
+      status: 'gated',
+      continuation: {
+        can_continue: false,
+        suggested_next_action: 'request_handoff',
+        handoff_state: handoffState,
+      },
+    };
+  }
+
+  const continuation = await assessResumeContinuation(page, state, anchors);
+
+  if (handoffState === 'resumed_verified' || handoffState === 'resumed_unverified') {
+    if (continuation.task_continuation_ok === false) {
+      return {
+        status: 'failed',
+        continuation: {
+          ...continuation,
+          can_continue: false,
+          handoff_state: handoffState,
+        },
+      };
+    }
+
+    if (continuation.continuation_ready) {
+      return {
+        status: 'resumed',
+        continuation: {
+          ...continuation,
+          can_continue: true,
+          handoff_state: handoffState,
+        },
+      };
+    }
+
+    return {
+      status: 'failed',
+      continuation: {
+        ...continuation,
+        can_continue: false,
+        handoff_state: handoffState,
+      },
+    };
+  }
+
+  if (continuation.task_continuation_ok === false) {
+    return {
+      status: 'failed',
+      continuation: {
+        ...continuation,
+        can_continue: false,
+        handoff_state: handoffState,
+      },
+    };
+  }
+
+  return {
+    status: 'direct',
+    continuation: {
+      ...continuation,
+      can_continue: true,
+      handoff_state: handoffState,
+    },
+  };
+}

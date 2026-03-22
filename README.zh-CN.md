@@ -123,7 +123,7 @@ args = ["-y", "grasp"]
 1. `entry` 或 `continue` 发现页面受阻
 2. `request_handoff` 记录人工步骤
 3. `mark_handoff_done` 标记人工步骤完成
-4. `resume_after_handoff` 带着 continuation evidence 重新接回页面
+4. `resume_after_handoff` 带着延续性证据重新接回页面
 5. `continue` 判断接下来该继续、等待，还是再次接力
 
 产品说明见：[docs/product/ai-browser-gateway.md](./docs/product/ai-browser-gateway.md)

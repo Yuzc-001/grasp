@@ -1,4 +1,4 @@
-function normalizeText(value) {
+export function normalizeText(value) {
   if (Array.isArray(value)) {
     return value.filter((line) => line !== undefined && line !== null && line !== '').join('\n');
   }

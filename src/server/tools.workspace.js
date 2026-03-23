@@ -147,11 +147,7 @@ function getWorkspaceNextAction(snapshot) {
     return 'select_live_item';
   }
 
-  if (composer && activeItemStable && sendLikeControls.length === 0) {
-    return 'workspace_inspect';
-  }
-
-  if (composer && activeItemStable && draftPresent) {
+  if (composer && activeItemStable && draftPresent && sendLikeControls.length > 0) {
     return 'execute_action';
   }
 
@@ -218,8 +214,9 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
       const { pageInfo, snapshot, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
       const status = getWorkspaceStatus(state);
       const continuationAction = status === 'direct' ? 'workspace_inspect' : 'request_handoff';
+      const delegated = status === 'direct' && typeof actionDependency === 'function';
 
-      if (status === 'direct' && typeof actionDependency === 'function') {
+      if (delegated) {
         await actionDependency({
           page,
           snapshot,
@@ -236,7 +233,7 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
           task_kind: 'workspace',
           action: {
             kind: actionKind,
-            status: status === 'direct' ? 'unimplemented' : 'blocked',
+            status: status === 'direct' ? (delegated ? 'delegated' : 'unimplemented') : 'blocked',
           },
           workspace,
           summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,

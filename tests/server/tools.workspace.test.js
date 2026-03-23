@@ -141,68 +141,68 @@ test('workspace_inspect prefers select_live_item when there is no active item ev
 });
 
 test('workspace_inspect does not suggest execute_action when blockers are visible or send controls are missing', async () => {
-  const cases = [
-    {
-      label: 'visible blocker',
-      snapshot: {
-        workspace_surface: 'thread',
-        live_items: [{ label: '李女士', selected: true }],
-        active_item: { label: '李女士' },
-        composer: { kind: 'chat_composer', draft_present: true },
-        action_controls: [{ label: '发送', action_kind: 'send' }],
-        blocking_modals: [{ label: '权限提示' }],
+  const blockerCalls = [];
+  const blockerServer = { registerTool(name, spec, handler) { blockerCalls.push({ name, handler }); } };
+  const blockerState = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  registerWorkspaceTools(blockerServer, blockerState, {
+    getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'thread',
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      composer: { kind: 'chat_composer', draft_present: true },
+      action_controls: [{ label: '发送', action_kind: 'send' }],
+      blocking_modals: [{ label: '权限提示' }],
+      loading_shell: false,
+      summary: {
+        active_item_label: '李女士',
+        draft_present: true,
         loading_shell: false,
-        summary: {
-          active_item_label: '李女士',
-          draft_present: true,
-          loading_shell: false,
-          outcome_signals: { active_item_stable: true },
-        },
+        outcome_signals: { active_item_stable: true },
       },
-    },
-    {
-      label: 'missing send control',
-      snapshot: {
-        workspace_surface: 'thread',
-        live_items: [{ label: '李女士', selected: true }],
-        active_item: { label: '李女士' },
-        composer: { kind: 'chat_composer', draft_present: true },
-        action_controls: [{ label: '取消', action_kind: 'dismiss' }],
-        blocking_modals: [],
+    }),
+  });
+
+  const blockerResult = await blockerCalls.find((entry) => entry.name === 'workspace_inspect').handler({});
+  assert.equal(blockerResult.meta.continuation.suggested_next_action, 'workspace_inspect');
+
+  const missingSendCalls = [];
+  const missingSendServer = { registerTool(name, spec, handler) { missingSendCalls.push({ name, handler }); } };
+  const missingSendState = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  registerWorkspaceTools(missingSendServer, missingSendState, {
+    getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'thread',
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      composer: { kind: 'chat_composer', draft_present: false },
+      action_controls: [{ label: '取消', action_kind: 'dismiss' }],
+      blocking_modals: [],
+      loading_shell: false,
+      summary: {
+        active_item_label: '李女士',
+        draft_present: false,
         loading_shell: false,
-        summary: {
-          active_item_label: '李女士',
-          draft_present: true,
-          loading_shell: false,
-          outcome_signals: { active_item_stable: true },
-        },
+        outcome_signals: { active_item_stable: true },
       },
-    },
-  ];
+    }),
+  });
 
-  for (const testCase of cases) {
-    const calls = [];
-    const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
-    const state = {
-      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
-      handoff: { state: 'idle' },
-    };
-
-    registerWorkspaceTools(server, state, {
-      getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
-      syncPageState: async () => undefined,
-      collectVisibleWorkspaceSnapshot: async () => testCase.snapshot,
-    });
-
-    const tool = calls.find((entry) => entry.name === 'workspace_inspect');
-    const result = await tool.handler({});
-
-    assert.notEqual(result.meta.continuation.suggested_next_action, 'execute_action');
-    assert.equal(result.meta.continuation.suggested_next_action, 'workspace_inspect');
-  }
+  const missingSendResult = await missingSendCalls.find((entry) => entry.name === 'workspace_inspect').handler({});
+  assert.equal(missingSendResult.meta.continuation.suggested_next_action, 'draft_action');
 });
 
-test('workspace action skeletons call injected handlers only on direct pages', async () => {
+test('workspace action skeletons delegate on direct pages and short-circuit when gated', async () => {
   const directCalls = [];
   const directServer = { registerTool(name, spec, handler) { directCalls.push({ name, handler }); } };
   const directState = {
@@ -210,6 +210,7 @@ test('workspace action skeletons call injected handlers only on direct pages', a
     handoff: { state: 'idle' },
   };
 
+  const directInvocations = [];
   registerWorkspaceTools(directServer, directState, {
     getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
     syncPageState: async () => undefined,
@@ -223,9 +224,9 @@ test('workspace action skeletons call injected handlers only on direct pages', a
       loading_shell: false,
       summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
     }),
-    selectLiveItem: async () => 'select_live_item_mutated',
-    draftAction: async () => 'draft_action_mutated',
-    executeAction: async () => 'execute_action_mutated',
+    selectLiveItem: async () => directInvocations.push('select_live_item'),
+    draftAction: async () => directInvocations.push('draft_action'),
+    executeAction: async () => directInvocations.push('execute_action'),
   });
 
   const directResults = [];
@@ -237,12 +238,13 @@ test('workspace action skeletons call injected handlers only on direct pages', a
   assert.equal(directResults[0].meta.continuation.suggested_next_action, 'workspace_inspect');
   assert.equal(directResults[1].meta.continuation.suggested_next_action, 'workspace_inspect');
   assert.equal(directResults[2].meta.continuation.suggested_next_action, 'workspace_inspect');
-  assert.deepEqual(directResults.map((result) => result.meta.result.action.status), ['unimplemented', 'unimplemented', 'unimplemented']);
+  assert.deepEqual(directResults.map((result) => result.meta.result.action.status), ['delegated', 'delegated', 'delegated']);
+  assert.deepEqual(directInvocations, ['select_live_item', 'draft_action', 'execute_action']);
 
   const blockedCalls = [];
   const blockedServer = { registerTool(name, spec, handler) { blockedCalls.push({ name, handler }); } };
   const blockedState = {
-    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: true },
     handoff: { state: 'handoff_required' },
   };
   const blockedMutations = [];

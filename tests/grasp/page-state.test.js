@@ -132,12 +132,28 @@ test('workspace pages classify as workspace with a coarse surface hint', () => {
   assert.equal(next.workspaceSurface, 'thread');
 });
 
-test('common content pages are not misclassified as workspace', () => {
+test('path substrings do not trigger workspace classification', () => {
   const state = applySnapshotToPageGraspState(createPageGraspState(), {
-    url: 'https://example.com/article',
+    url: 'https://example.com/chatops-guide',
     snapshotHash: 'content-a',
     title: 'Example article',
-    bodyText: '消息 详情 列表 加载中 This is a normal article page with illustrative text.',
+    bodyText: 'This is a normal article page with illustrative text.',
+    nodes: 6,
+    forms: 0,
+    navs: 1,
+    headings: ['Example article'],
+  });
+
+  assert.notEqual(state.currentRole, 'workspace');
+  assert.equal(state.currentRole, 'content');
+});
+
+test('composer text alone does not trigger workspace classification on generic pages', () => {
+  const state = applySnapshotToPageGraspState(createPageGraspState(), {
+    url: 'https://example.com/article',
+    snapshotHash: 'content-b',
+    title: 'Example article',
+    bodyText: '输入消息 按Enter键发送 发送消息 This is a normal article page with illustrative text.',
     nodes: 6,
     forms: 0,
     navs: 1,

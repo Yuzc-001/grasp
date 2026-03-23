@@ -80,16 +80,22 @@ function getUrlPath(url) {
   }
 }
 
+function getUrlPathSegments(url) {
+  return getUrlPath(url).split('/').filter(Boolean);
+}
+
+function hasWorkspacePathEvidence(url) {
+  const segments = getUrlPathSegments(url);
+  const workspaceSegments = ['chat', 'thread', 'conversation', 'inbox', 'message', 'messages', 'msg'];
+  return segments.some((segment) => workspaceSegments.includes(segment));
+}
+
 function detectWorkspaceSignals({ url, title = '', bodyText = '', headings = [] }) {
   const text = bodyText.toLowerCase();
-  const path = getUrlPath(url);
   const signals = [];
 
-  if (path.includes('/chat') || path.includes('/thread') || path.includes('/conversation') || path.includes('/inbox')) {
+  if (hasWorkspacePathEvidence(url)) {
     signals.push('workspace_path');
-  }
-  if (path.includes('/message') || path.includes('/msg')) {
-    signals.push('workspace_message_path');
   }
   if (text.includes('按enter键发送')) {
     signals.push('workspace_composer_text');
@@ -110,28 +116,12 @@ function detectWorkspaceSignals({ url, title = '', bodyText = '', headings = [] 
   return [...new Set(signals)];
 }
 
-function scoreWorkspaceSurface({ url, bodyText = '', headings = [] }) {
+function scoreWorkspaceSurface({ url, bodyText = '' }) {
   const text = bodyText.toLowerCase();
-  const headingText = headings.join(' ').toLowerCase();
-  const path = getUrlPath(url);
-  let threadScore = 0;
+  let threadScore = hasWorkspacePathEvidence(url) ? 2 : 0;
   let composerScore = 0;
   let loadingScore = 0;
-  let detailScore = 0;
-  let listScore = 0;
 
-  if (path.includes('/chat') || path.includes('/thread') || path.includes('/conversation') || path.includes('/inbox')) {
-    threadScore += 3;
-  }
-  if (path.includes('/message') || path.includes('/msg')) {
-    threadScore += 2;
-  }
-  if (text.includes('消息')) {
-    threadScore += 1;
-  }
-  if (text.includes('聊天') || text.includes('对话')) {
-    threadScore += 1;
-  }
   if (text.includes('按enter键发送')) {
     composerScore += 3;
   }
@@ -144,41 +134,38 @@ function scoreWorkspaceSurface({ url, bodyText = '', headings = [] }) {
   if (text.includes('输入消息')) {
     composerScore += 3;
   }
+  if (text.includes('消息')) {
+    threadScore += 1;
+  }
+  if (text.includes('聊天') || text.includes('对话')) {
+    threadScore += 1;
+  }
   if (text.includes('加载中，请稍候')) {
     loadingScore += 2;
   }
-  if (text.includes('详情') || headingText.includes('详情') || path.includes('/detail')) {
-    detailScore += 1;
-  }
-  if (text.includes('列表') || headingText.includes('列表') || path.includes('/list')) {
-    listScore += 1;
-  }
 
-  return { threadScore, composerScore, loadingScore, detailScore, listScore };
+  return { threadScore, composerScore, loadingScore };
 }
 
 function classifyWorkspaceSurface(scores = {}) {
-  const { threadScore = 0, composerScore = 0, loadingScore = 0, detailScore = 0, listScore = 0 } = scores;
+  const { threadScore = 0, composerScore = 0, loadingScore = 0 } = scores;
 
   if (loadingScore > 0) {
     return 'loading_shell';
   }
-  if (composerScore >= 2 && composerScore >= threadScore) {
+  if (composerScore >= 3 && composerScore > threadScore) {
     return 'composer';
   }
   if (threadScore >= 2) {
     return 'thread';
   }
-  if (detailScore > 0) {
-    return 'detail';
-  }
-  if (listScore > 0) {
-    return 'list';
-  }
-  return 'list';
+  return null;
 }
 
 function classifyWorkspaceRole({ url, bodyText = '', headings = [] }) {
+  if (!hasWorkspacePathEvidence(url)) {
+    return null;
+  }
   const scores = scoreWorkspaceSurface({ url, bodyText, headings });
   return Math.max(scores.threadScore, scores.composerScore) >= 2 ? scores : null;
 }
@@ -267,7 +254,7 @@ export function applySnapshotToPageGraspState(
   });
   next.workspaceSignals = detectWorkspaceSignals({ url, title, bodyText, headings });
   next.currentRole = classifyPageRole({ url, title, bodyText, nodes, forms, navs, headings });
-  next.workspaceSurface = next.currentRole === 'workspace' ? classifyWorkspaceSurface(scoreWorkspaceSurface({ url, bodyText, headings })) : null;
+  next.workspaceSurface = next.currentRole === 'workspace' ? classifyWorkspaceSurface(scoreWorkspaceSurface({ url, bodyText })) : null;
   next.graspConfidence = classifyConfidence({ bodyText, nodes, urlChanged, domRevisionChanged });
 
   return next;

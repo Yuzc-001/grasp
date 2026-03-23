@@ -7,7 +7,7 @@ Thank you for your interest in contributing.
 ## Before you start
 
 - Read [README.md](README.md) to understand what Grasp is and what it is not
-- Check [ROADMAP.md](ROADMAP.md) to see what is planned and what is out of scope
+- Check the README and current issues to see what is in scope before starting new work
 - Search [Issues](https://github.com/Yuzc-001/grasp/issues) before opening a new one
 
 ---

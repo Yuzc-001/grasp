@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.4.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.5.2-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.zh-CN.md#快速开始)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -11,7 +11,7 @@
 
 Grasp 完全本地运行，使用专属的 `chrome-grasp` 浏览器配置目录，让智能体拥有可以复用的浏览器会话，而不是每次都从空白标签页重新开始。
 
-当前包版本：`v0.4.0`  
+当前包版本：`v0.5.2`  
 对外文档入口：[docs/README.md](./docs/README.md)
 
 ---
@@ -194,7 +194,7 @@ Workspace 任务参考：[docs/reference/mcp-tools.md](./docs/reference/mcp-tool
 ## 发布
 
 - [CHANGELOG.md](./CHANGELOG.md)
-- [docs/release-notes-v0.4.0.md](./docs/release-notes-v0.4.0.md)
+- [docs/release-notes-v0.5.2.md](./docs/release-notes-v0.5.2.md)
 
 ## 许可证
 

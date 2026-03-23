@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildGatewayResponse } from '../../src/server/gateway-response.js';
 
-test('buildGatewayResponse returns the normalized v0.5 gateway shape', () => {
+test('buildGatewayResponse returns the normalized gateway shape', () => {
   const response = buildGatewayResponse({
     status: 'direct',
     page: { title: 'Example', url: 'https://example.com', page_role: 'content', risk_gate: false, grasp_confidence: 'high' },

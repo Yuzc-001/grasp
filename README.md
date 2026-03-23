@@ -2,7 +2,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.4.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.5.2-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#quickstart)
 [![npm](https://img.shields.io/badge/npm-grasp-CB3837?style=flat-square)](https://www.npmjs.com/package/grasp)
@@ -11,7 +11,7 @@
 
 Grasp runs locally, keeps a dedicated `chrome-grasp` profile, and gives agents a browser session they can reuse instead of restarting from scratch every time.
 
-Current package release: `v0.4.0`  
+Current package release: `v0.5.2`  
 Public docs for the gateway surface: [docs/README.md](./docs/README.md)
 
 ---
@@ -189,7 +189,7 @@ Full reference: [docs/reference/mcp-tools.md](./docs/reference/mcp-tools.md)
 ## Releases
 
 - [CHANGELOG.md](./CHANGELOG.md)
-- [docs/release-notes-v0.4.0.md](./docs/release-notes-v0.4.0.md)
+- [docs/release-notes-v0.5.2.md](./docs/release-notes-v0.5.2.md)
 
 ## License
 

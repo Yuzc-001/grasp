@@ -2,7 +2,7 @@
 
 Public docs for the Grasp gateway surface.
 
-Current package release: `v0.4.0`
+Current package release: `v0.5.2`
 
 ---
 
@@ -27,4 +27,4 @@ Current package release: `v0.4.0`
 
 ## Releases
 
-- [v0.4.0 release notes](./release-notes-v0.4.0.md)
+- [v0.5.2 release notes](./release-notes-v0.5.2.md)

@@ -4,6 +4,28 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.5.2 — 2026-03-23
+
+The release where Grasp becomes an AI browser gateway with safe real form tasks and dynamic authenticated task flows.
+
+### Added
+- Gateway-first product surface centered on `entry`, `inspect`, `extract`, and `continue`
+- Safe form-task layer with `form_inspect`, `fill_form`, `set_option`, `set_date`, `verify_form`, and `safe_submit`
+- Dynamic authenticated workspace-task layer with `workspace_inspect`, `select_live_item`, `draft_action`, `execute_action`, and `verify_outcome`
+- Guarded preview-first submit and send paths, with explicit confirmation required for irreversible actions
+
+### Changed
+- README, CLI help, and public docs now describe Grasp as an AI browser gateway instead of a browser runtime-first toolset
+- Public docs were reduced to the current release surface, with internal and obsolete planning documents removed from the visible docs set
+- Package metadata, release links, and versioned docs now point to `v0.5.2`
+
+### Validated
+- Safe real form tasks were exercised on real recruitment flows up to pre-submit verification
+- Dynamic authenticated workspace flows were exercised on live messaging-style surfaces with inspection, draft, guarded send, and outcome verification
+- Full automated test suite passes: `174 / 174`
+
+---
+
 ## v0.4.0 — 2026-03-21
 
 The release where Grasp becomes a browser runtime centered on continuity: runtime truth, page grasp, verified actions, persisted handoff, and false-verified rejection.

@@ -1,6 +1,6 @@
 # AI Browser Gateway
 
-Grasp's `v0.5` direction is to make the product feel like a browser gateway for AI, not just a pile of browser primitives.
+Grasp's `v0.5.2` product position is to make the product feel like an AI browser gateway, not just a pile of browser primitives.
 
 The core idea is simple:
 

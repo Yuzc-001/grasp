@@ -27,6 +27,21 @@ function getComposer(snapshot) {
   return composer && typeof composer === 'object' ? composer : null;
 }
 
+function getActionControls(snapshot) {
+  const controls = pick(snapshot, 'actionControls', 'action_controls', []);
+  return Array.isArray(controls) ? controls : [];
+}
+
+function getSendLikeActionControls(snapshot) {
+  return getActionControls(snapshot).filter((control) => {
+    const label = String(control?.label ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return label.includes('发送')
+      || label.includes('send')
+      || label.includes('回复')
+      || label.includes('提交');
+  });
+}
+
 function getWorkspaceSurface(snapshot) {
   return pick(snapshot, 'workspaceSurface', 'workspace_surface', null) ?? classifyWorkspaceSurface(snapshot);
 }
@@ -72,6 +87,67 @@ function normalizeWorkspaceSnapshot(snapshot) {
 
 function buildUnsupportedWorkspace(requestedLabel) {
   return buildUnresolved('unsupported_workspace', requestedLabel);
+}
+
+function buildWorkspaceExecuteBlocked(reason, requestedLabel, snapshot) {
+  return {
+    status: 'blocked',
+    blocked: true,
+    executed: false,
+    reason,
+    unresolved: null,
+    failure: null,
+    action: {
+      kind: 'execute_action',
+      status: 'blocked',
+    },
+    snapshot: normalizeWorkspaceSnapshot(snapshot ?? null),
+    workspace: null,
+    summary: null,
+    requested_label: compactText(requestedLabel),
+  };
+}
+
+function buildWorkspaceExecuteUnresolved(reason, requestedLabel, matches = [], recoveryHint = null, snapshot = null) {
+  return {
+    status: 'unresolved',
+    blocked: false,
+    executed: false,
+    reason,
+    unresolved: {
+      reason,
+      requested_label: compactText(requestedLabel),
+      recovery_hint: recoveryHint,
+      matches,
+    },
+    failure: null,
+    action: {
+      kind: 'execute_action',
+      status: 'unresolved',
+    },
+    snapshot: normalizeWorkspaceSnapshot(snapshot ?? null),
+    workspace: null,
+    summary: null,
+    requested_label: compactText(requestedLabel),
+  };
+}
+
+function buildWorkspaceExecuteFailed(failure, snapshot) {
+  return {
+    status: 'failed',
+    blocked: false,
+    executed: true,
+    reason: 'verification_failed',
+    unresolved: null,
+    failure,
+    action: {
+      kind: 'execute_action',
+      status: 'failed',
+    },
+    snapshot: normalizeWorkspaceSnapshot(snapshot ?? null),
+    workspace: null,
+    summary: null,
+  };
 }
 
 function getSelectionMatchLabel(item) {
@@ -849,5 +925,141 @@ export async function draftWorkspaceAction(runtime, text, options = {}) {
       kind: 'draft_action',
       status: 'drafted',
     },
+  };
+}
+
+export async function executeWorkspaceAction(runtime, options = {}) {
+  const state = runtime?.state ?? null;
+  const gatewayStatus = getWorkspaceStatus(state ?? {});
+  const initialSnapshot = normalizeWorkspaceSnapshot(runtime?.snapshot ?? runtime ?? {});
+  const action = options?.action ?? 'send';
+  const mode = options?.mode ?? 'preview';
+  const confirmation = options?.confirmation;
+
+  if (gatewayStatus !== 'direct') {
+    return {
+      status: 'blocked',
+      blocked: true,
+      executed: false,
+      reason: gatewayStatus,
+      unresolved: null,
+      failure: null,
+      action: {
+        kind: 'execute_action',
+        status: 'blocked',
+      },
+      snapshot: initialSnapshot,
+      workspace: null,
+      summary: null,
+    };
+  }
+
+  if (action !== 'send') {
+    return buildWorkspaceExecuteUnresolved('unsupported_action', action, [], null, initialSnapshot);
+  }
+
+  const sendControl = getSendLikeActionControls(initialSnapshot)[0] ?? null;
+  if (!sendControl || !compactText(sendControl?.hint_id)) {
+    return buildWorkspaceExecuteUnresolved('no_live_target', 'send', sendControl ? [sendControl] : [], 'reinspect_workspace', initialSnapshot);
+  }
+
+  if (mode === 'preview') {
+    return buildWorkspaceExecuteBlocked('preview_safe', 'send', initialSnapshot);
+  }
+
+  if (confirmation !== 'EXECUTE') {
+    return buildWorkspaceExecuteBlocked('confirmation_required', 'send', initialSnapshot);
+  }
+
+  const page = runtime?.page ?? runtime;
+  const click = runtime?.clickByHintId ?? clickByHintId;
+  const rebuildHints = runtime?.rebuildHints;
+  const execute = runtime?.executeGuardedAction ?? executeGuardedAction;
+  const verify = runtime?.verifyActionOutcome ?? verifyActionOutcome;
+
+  const execution = await execute({
+    runtime,
+    execute: async () => {
+      await click(page, sendControl.hint_id, { rebuildHints });
+      return { control: sendControl };
+    },
+    verify: async ({ snapshot: refreshedSnapshot, executionResult }) => {
+      const verification = await verify({
+        page,
+        kind: 'execute_action',
+        target: 'send',
+        hintId: sendControl.hint_id,
+        outcomeSignals: refreshedSnapshot?.outcome_signals ?? null,
+        snapshot: refreshedSnapshot,
+      });
+
+      if (!verification.ok) {
+        return {
+          ok: false,
+          failure: {
+            error_code: verification.error_code ?? 'ACTION_NOT_VERIFIED',
+            retryable: verification.retryable ?? true,
+            suggested_next_step: verification.suggested_next_step ?? 'reverify',
+          },
+          evidence: verification.evidence ?? {
+            kind: 'execute_action',
+            target: 'send',
+            executionResult,
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        evidence: verification.evidence ?? {
+          kind: 'execute_action',
+          target: 'send',
+          executionResult,
+        },
+        verification: {
+          delivered: refreshedSnapshot?.outcome_signals?.delivered === true,
+          composer_cleared: refreshedSnapshot?.outcome_signals?.composer_cleared === true,
+          active_item_stable: refreshedSnapshot?.outcome_signals?.active_item_stable === true,
+        },
+      };
+    },
+  });
+
+  const resultSnapshot = normalizeWorkspaceSnapshot(execution?.snapshot ?? runtime?.snapshot ?? initialSnapshot);
+
+  if (runtime && typeof runtime === 'object') {
+    runtime.snapshot = resultSnapshot;
+  }
+
+  if (!execution?.ok) {
+    return buildWorkspaceExecuteFailed(
+      execution?.failure ?? {
+        error_code: execution?.error_code ?? 'ACTION_NOT_VERIFIED',
+        retryable: execution?.retryable ?? true,
+        suggested_next_step: execution?.suggested_next_step ?? 'reverify',
+      },
+      resultSnapshot,
+    );
+  }
+
+  return {
+    status: 'success',
+    blocked: false,
+    executed: true,
+    reason: null,
+    unresolved: null,
+    failure: null,
+    verification: execution.verification ?? {
+      delivered: resultSnapshot?.outcome_signals?.delivered === true,
+      composer_cleared: resultSnapshot?.outcome_signals?.composer_cleared === true,
+      active_item_stable: resultSnapshot?.outcome_signals?.active_item_stable === true,
+    },
+    action: {
+      kind: 'execute_action',
+      status: 'executed',
+    },
+    snapshot: resultSnapshot,
+    workspace: null,
+    summary: resultSnapshot?.summary?.summary ?? resultSnapshot?.summary_text ?? null,
   };
 }

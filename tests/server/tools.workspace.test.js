@@ -202,7 +202,7 @@ test('workspace_inspect does not suggest execute_action when blockers are visibl
   assert.equal(missingSendResult.meta.continuation.suggested_next_action, 'draft_action');
 });
 
-test('workspace action tools select live items directly while draft_action drafts directly and execute still delegates', async () => {
+test('workspace action tools select live items directly while draft_action drafts directly and execute_action confirms explicitly', async () => {
   const directCalls = [];
   const directServer = { registerTool(name, spec, handler) { directCalls.push({ name, handler }); } };
   const directState = {
@@ -248,13 +248,61 @@ test('workspace action tools select live items directly while draft_action draft
         },
       };
     },
-    executeAction: async () => directInvocations.push('execute_action'),
+    executeWorkspaceAction: async (_runtime, params) => {
+      directInvocations.push(`execute_action:${params.mode}:${params.confirmation ?? ''}`);
+      return {
+        status: 'success',
+        blocked: false,
+        reason: null,
+        executed: true,
+        unresolved: null,
+        failure: null,
+        verification: {
+          delivered: true,
+          composer_cleared: true,
+          active_item_stable: true,
+        },
+        action: {
+          kind: 'execute_action',
+          status: 'executed',
+        },
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [
+            { label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' },
+          ],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+        workspace: {
+          workspace_surface: 'thread',
+          live_items: [
+            { label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' },
+          ],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: false, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [],
+          loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+        summary: 'Workspace thread • 李女士',
+      };
+    },
   });
 
   const directResults = [];
   for (const toolName of ['select_live_item', 'draft_action', 'execute_action']) {
     const tool = directCalls.find((entry) => entry.name === toolName);
-    directResults.push(await tool.handler(toolName === 'select_live_item' ? { item: '李女士' } : toolName === 'draft_action' ? { text: '你好' } : {}));
+    directResults.push(await tool.handler(toolName === 'select_live_item'
+      ? { item: '李女士' }
+      : toolName === 'draft_action'
+        ? { text: '你好' }
+        : { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' }));
   }
 
   assert.equal(directResults[0].meta.continuation.suggested_next_action, 'workspace_inspect');
@@ -262,7 +310,7 @@ test('workspace action tools select live items directly while draft_action draft
   assert.equal(directResults[2].meta.continuation.suggested_next_action, 'workspace_inspect');
   assert.equal(directResults[0].meta.result.status, 'selected');
   assert.equal(directResults[1].meta.result.status, 'drafted');
-  assert.deepEqual(directResults.map((result) => result.meta.result.action.status), ['selected', 'drafted', 'delegated']);
+  assert.deepEqual(directResults.map((result) => result.meta.result.action.status), ['selected', 'drafted', 'executed']);
   assert.equal(directResults[0].meta.result.selected_item.label, '李女士');
   assert.equal(directResults[0].meta.result.active_item.label, '李女士');
   assert.equal(directResults[0].meta.result.selected_item.hint_id, undefined);
@@ -277,7 +325,12 @@ test('workspace action tools select live items directly while draft_action draft
   assert.equal(directResults[1].meta.result.snapshot.live_items[0].hint_id, undefined);
   assert.equal(directResults[1].meta.result.snapshot.live_items[0].normalized_label, undefined);
   assert.equal(directResults[1].meta.result.snapshot.composer?.hint_id, undefined);
-  assert.deepEqual(directInvocations, ['select_live_item', 'draft_action:你好', 'execute_action']);
+  assert.equal(directResults[2].meta.result.status, 'success');
+  assert.equal(directResults[2].meta.result.snapshot.live_items[0].hint_id, undefined);
+  assert.equal(directResults[2].meta.result.snapshot.live_items[0].normalized_label, undefined);
+  assert.equal(directResults[2].meta.result.snapshot.composer?.hint_id, undefined);
+  assert.equal(directResults[2].meta.result.snapshot.composer?.draft_text, undefined);
+  assert.deepEqual(directInvocations, ['select_live_item', 'draft_action:你好', 'execute_action:confirm:EXECUTE']);
 
   const blockedCalls = [];
   const blockedServer = { registerTool(name, spec, handler) { blockedCalls.push({ name, handler }); } };
@@ -302,7 +355,7 @@ test('workspace action tools select live items directly while draft_action draft
     }),
     selectLiveItem: async () => blockedMutations.push('select_live_item_mutated'),
     draftWorkspaceAction: async () => blockedMutations.push('draft_action_mutated'),
-    executeAction: async () => blockedMutations.push('execute_action_mutated'),
+    clickByHintId: async () => blockedMutations.push('execute_action_mutated'),
   });
 
   for (const toolName of ['select_live_item', 'draft_action', 'execute_action']) {
@@ -328,6 +381,9 @@ test('workspace action tools select live items directly while draft_action draft
       assert.equal(result.meta.result.snapshot.composer?.draft_text, undefined);
       assert.equal(result.meta.result.snapshot.composer?.hint_id, undefined);
       assert.equal(result.meta.result.draft_evidence?.draft_text, undefined);
+    } else {
+      assert.equal(result.meta.result.status, 'blocked');
+      assert.equal(result.meta.result.action.status, 'blocked');
     }
   }
 
@@ -356,7 +412,7 @@ test('workspace action tools select live items directly while draft_action draft
     }),
     selectLiveItem: async () => gatedMutations.push('select_live_item_mutated'),
     draftWorkspaceAction: async () => gatedMutations.push('draft_action_mutated'),
-    executeAction: async () => gatedMutations.push('execute_action_mutated'),
+    clickByHintId: async () => gatedMutations.push('execute_action_mutated'),
   });
 
   const gatedResult = await gatedCalls.find((entry) => entry.name === 'draft_action').handler({ text: '你好' });
@@ -368,6 +424,113 @@ test('workspace action tools select live items directly while draft_action draft
   assert.equal(gatedResult.meta.result.snapshot.composer?.draft_text, undefined);
   assert.equal(gatedResult.meta.result.draft_evidence?.draft_text, undefined);
   assert.deepEqual(gatedMutations, []);
+});
+
+test('execute_action exposes unresolved and failed responses without leaking internal fields', async () => {
+  const cases = [
+    {
+      name: 'unresolved',
+      executeResult: {
+        status: 'unresolved',
+        unresolved: {
+          reason: 'no_live_target',
+          requested_label: '发送',
+          recovery_hint: 'reinspect_workspace',
+          matches: [{ label: '发送', hint_id: 'B1' }],
+        },
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [], loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+        },
+        workspace: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [], loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+        },
+      },
+      expectedStatus: 'unresolved',
+    },
+    {
+      name: 'failed',
+      executeResult: {
+        status: 'failed',
+        failure: {
+          error_code: 'ACTION_NOT_VERIFIED',
+          retryable: true,
+          suggested_next_step: 'reverify',
+        },
+        snapshot: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [], loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+        },
+        workspace: {
+          workspace_surface: 'thread',
+          live_items: [{ label: '李女士', selected: true, hint_id: 'L1', normalized_label: '李女士' }],
+          active_item: { label: '李女士', hint_id: 'L1', normalized_label: '李女士', selected: true },
+          composer: { kind: 'chat_composer', hint_id: 'C1', draft_present: true, draft_text: 'internal' },
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          blocking_modals: [], loading_shell: false,
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+        },
+      },
+      expectedStatus: 'failed',
+    },
+  ];
+
+  for (const testCase of cases) {
+    const calls = [];
+    const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+    const state = {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    };
+
+    registerWorkspaceTools(server, state, {
+      getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+      syncPageState: async () => undefined,
+      collectVisibleWorkspaceSnapshot: async () => testCase.executeResult.snapshot,
+      executeWorkspaceAction: async () => testCase.executeResult,
+    });
+
+    const result = await calls.find((entry) => entry.name === 'execute_action').handler({
+      action: 'send',
+      mode: 'confirm',
+      confirmation: 'EXECUTE',
+    });
+
+    assert.equal(result.meta.result.status, testCase.expectedStatus, testCase.name);
+    assert.equal(result.meta.result.snapshot.live_items[0].hint_id, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.live_items[0].normalized_label, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.composer?.hint_id, undefined, testCase.name);
+    assert.equal(result.meta.result.snapshot.composer?.draft_text, undefined, testCase.name);
+
+    if (testCase.name === 'unresolved') {
+      assert.equal(result.meta.result.unresolved.reason, 'no_live_target');
+      assert.equal(result.meta.result.unresolved.matches, undefined);
+      assert.equal(result.meta.result.failure, null);
+    } else {
+      assert.deepEqual(result.meta.result.failure, {
+        error_code: 'ACTION_NOT_VERIFIED',
+        retryable: true,
+        suggested_next_step: 'reverify',
+      });
+      assert.equal(result.meta.result.unresolved, null);
+    }
+  }
 });
 
 test('select_live_item exposes unresolved reasons in the public response', async () => {

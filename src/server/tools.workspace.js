@@ -5,7 +5,7 @@ import { getActivePage } from '../layer1-bridge/chrome.js';
 import { clickByHintId } from '../layer3-action/actions.js';
 import { syncPageState } from './state.js';
 import { collectVisibleWorkspaceSnapshot, getWorkspaceContinuation, getWorkspaceStatus, summarizeWorkspaceSnapshot } from './workspace-tasks.js';
-import { draftWorkspaceAction, selectWorkspaceItem } from './workspace-runtime.js';
+import { draftWorkspaceAction, executeWorkspaceAction, selectWorkspaceItem } from './workspace-runtime.js';
 
 function toGatewayPage(page, state) {
   return {
@@ -177,6 +177,36 @@ function toPublicDraftFailure(result) {
     error_code: errorCode,
     retryable: retryable ?? null,
     suggested_next_step: suggestedNextStep,
+  };
+}
+
+function toPublicExecuteUnresolved(unresolved) {
+  if (!unresolved) return null;
+
+  return {
+    reason: unresolved.reason ?? 'unknown',
+    requested_label: String(unresolved.requested_label ?? '').replace(/\s+/g, ' ').trim(),
+    recovery_hint: unresolved.recovery_hint ?? null,
+  };
+}
+
+function toPublicExecuteFailure(failure) {
+  if (!failure) return null;
+
+  return {
+    error_code: failure.error_code ?? null,
+    retryable: failure.retryable ?? null,
+    suggested_next_step: failure.suggested_next_step ?? null,
+  };
+}
+
+function toPublicExecuteVerification(verification) {
+  if (!verification) return null;
+
+  return {
+    delivered: verification.delivered === true,
+    composer_cleared: verification.composer_cleared === true,
+    active_item_stable: verification.active_item_stable === true,
   };
 }
 
@@ -432,6 +462,88 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
   );
 }
 
+function registerWorkspaceExecuteActionTool(server, state, deps) {
+  const getPage = deps.getActivePage ?? getActivePage;
+  const syncState = deps.syncPageState ?? syncPageState;
+  const collectSnapshot = deps.collectVisibleWorkspaceSnapshot ?? collectVisibleWorkspaceSnapshot;
+  const actionExecutor = deps.executeWorkspaceAction ?? executeWorkspaceAction;
+
+  server.registerTool(
+    'execute_action',
+    {
+      description: 'Execute the current workspace send action after explicit confirmation and return the refreshed workspace snapshot.',
+      inputSchema: {
+        action: z.enum(['send']).default('send'),
+        mode: z.enum(['preview', 'confirm']).default('preview'),
+        confirmation: z.string().optional(),
+      },
+    },
+    async ({ action = 'send', mode = 'preview', confirmation } = {}) => {
+      const page = await getPage();
+      const { pageInfo, snapshot, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
+      const status = getWorkspaceStatus(state);
+      const continuationAction = status === 'direct' ? 'workspace_inspect' : 'request_handoff';
+      const executeResult = await actionExecutor({
+        state,
+        page,
+        snapshot,
+        clickByHintId: deps.clickByHintId ?? clickByHintId,
+        executeGuardedAction: deps.executeGuardedAction,
+        verifyActionOutcome: deps.verifyActionOutcome,
+        rebuildHints: deps.rebuildHints,
+        refreshSnapshot: async () => {
+          await syncState(page, state, { force: true });
+          return collectSnapshot(page, state);
+        },
+      }, {
+        action,
+        mode,
+        confirmation,
+      });
+      const refreshedSnapshot = executeResult.snapshot ?? snapshot;
+      const refreshedView = buildWorkspaceSnapshotView(refreshedSnapshot);
+      const pageInfoAfter = {
+        title: await page.title(),
+        url: page.url(),
+      };
+
+      return buildGatewayResponse({
+        status,
+        page: toGatewayPage(pageInfoAfter, state),
+        result: {
+          task_kind: 'workspace',
+          status: executeResult.status ?? 'failed',
+          blocked: executeResult.blocked === true,
+          executed: executeResult.executed === true,
+          reason: executeResult.reason ?? null,
+          unresolved: toPublicExecuteUnresolved(executeResult.unresolved),
+          failure: toPublicExecuteFailure(executeResult.failure),
+          verification: toPublicExecuteVerification(executeResult.verification),
+          action: {
+            kind: 'execute_action',
+            status: executeResult.action?.status ?? (executeResult.status === 'success' ? 'executed' : executeResult.status ?? 'blocked'),
+          },
+          snapshot: refreshedView.workspace,
+          workspace: refreshedView.workspace,
+          summary: `Workspace ${refreshedView.workspaceSurface} • ${refreshedView.workspaceSummary.active_item_label ?? 'no active item'}`,
+        },
+        continuation: getWorkspaceContinuation(state, continuationAction),
+        evidence: {
+          workspace_surface: refreshedView.workspaceSurface,
+          active_item_label: refreshedView.workspaceSummary.active_item_label ?? null,
+          loading_shell: refreshedView.workspaceSummary.loading_shell ?? false,
+          blocking_modal_count: refreshedView.workspaceSummary.blocking_modal_count ?? 0,
+          blocked: executeResult.blocked === true,
+          executed: executeResult.executed === true,
+          reason: executeResult.reason ?? null,
+          verification: toPublicExecuteVerification(executeResult.verification),
+          failure: toPublicExecuteFailure(executeResult.failure),
+        },
+      });
+    }
+  );
+}
+
 export function registerWorkspaceTools(server, state, deps = {}) {
   const getPage = deps.getActivePage ?? getActivePage;
   const syncState = deps.syncPageState ?? syncPageState;
@@ -558,5 +670,5 @@ export function registerWorkspaceTools(server, state, deps = {}) {
     }
   );
   registerWorkspaceDraftActionTool(server, state, deps);
-  registerWorkspaceActionTool(server, state, deps, 'execute_action', 'execute_action');
+  registerWorkspaceExecuteActionTool(server, state, deps);
 }

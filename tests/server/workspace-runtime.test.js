@@ -9,6 +9,7 @@ import {
   selectItemByHint,
   draftWorkspaceAction,
   draftIntoComposer,
+  executeWorkspaceAction,
   verifyActionOutcome,
 } from '../../src/server/workspace-runtime.js';
 import { createFakePage } from '../helpers/fake-page.js';
@@ -664,4 +665,167 @@ test('draftWorkspaceAction returns blocked with a gateway reason when the worksp
   assert.equal(result.reason, 'gated');
   assert.equal(result.action.status, 'blocked');
   assert.equal(result.snapshot.composer.draft_present, false);
+});
+
+test('executeWorkspaceAction preview blocks without clicking', async () => {
+  let executed = false;
+
+  const result = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+      composer: { kind: 'chat_composer', draft_present: true },
+    },
+    executeGuardedAction: async () => {
+      executed = true;
+      return { ok: true };
+    },
+    verifyActionOutcome: async () => {
+      throw new Error('preview should not verify');
+    },
+  }, { action: 'send', mode: 'preview' });
+
+  assert.equal(executed, false);
+  assert.equal(result.blocked, true);
+  assert.equal(result.reason, 'preview_safe');
+  assert.equal(result.action.status, 'blocked');
+});
+
+test('executeWorkspaceAction confirm requires EXECUTE before clicking', async () => {
+  let executed = false;
+
+  const result = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+      composer: { kind: 'chat_composer', draft_present: true },
+    },
+    executeGuardedAction: async () => {
+      executed = true;
+      return { ok: true };
+    },
+    verifyActionOutcome: async () => {
+      throw new Error('confirmation should block');
+    },
+  }, { action: 'send', mode: 'confirm', confirmation: 'NOPE' });
+
+  assert.equal(executed, false);
+  assert.equal(result.blocked, true);
+  assert.equal(result.reason, 'confirmation_required');
+  assert.equal(result.action.status, 'blocked');
+});
+
+test('executeWorkspaceAction confirm with EXECUTE returns success when outcome is verified', async () => {
+  let executed = false;
+
+  const result = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+      composer: { kind: 'chat_composer', draft_present: true },
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+    },
+    clickByHintId: async () => ({ ok: true }),
+    executeGuardedAction: async ({ execute, verify }) => {
+      executed = true;
+      const executionResult = await execute();
+      return verify({
+        executionResult,
+        snapshot: {
+          workspace_surface: 'thread',
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          composer: { kind: 'chat_composer', draft_present: false },
+          live_items: [{ label: '李女士', selected: true }],
+          active_item: { label: '李女士' },
+          outcome_signals: {
+            delivered: true,
+            composer_cleared: true,
+            active_item_stable: true,
+          },
+          summary: { active_item_label: '李女士', draft_present: false, loading_shell: false },
+        },
+      });
+    },
+    verifyActionOutcome: async () => ({
+      ok: true,
+      evidence: {
+        delivered: true,
+        composer_cleared: true,
+        active_item_stable: true,
+      },
+    }),
+  }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
+
+  assert.equal(executed, true);
+  assert.equal(result.status, 'success');
+  assert.equal(result.executed, true);
+  assert.equal(result.action.status, 'executed');
+  assert.equal(result.verification.delivered, true);
+});
+
+test('executeWorkspaceAction returns failed when the outcome cannot be verified', async () => {
+  let executed = false;
+
+  const result = await executeWorkspaceAction({
+    state: {
+      pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+    },
+    snapshot: {
+      workspace_surface: 'thread',
+      action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+      composer: { kind: 'chat_composer', draft_present: true },
+    },
+    clickByHintId: async () => ({ ok: true }),
+    executeGuardedAction: async ({ execute, verify }) => {
+      executed = true;
+      const executionResult = await execute();
+      return verify({
+        executionResult,
+        snapshot: {
+          workspace_surface: 'thread',
+          action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+          composer: { kind: 'chat_composer', draft_present: true },
+          live_items: [{ label: '李女士', selected: true }],
+          active_item: { label: '李女士' },
+          outcome_signals: {
+            delivered: false,
+            composer_cleared: false,
+            active_item_stable: false,
+          },
+          summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+        },
+      });
+    },
+    verifyActionOutcome: async () => ({
+      ok: false,
+      error_code: 'ACTION_NOT_VERIFIED',
+      retryable: true,
+      suggested_next_step: 'reverify',
+      evidence: {
+        delivered: false,
+        composer_cleared: false,
+        active_item_stable: false,
+      },
+    }),
+  }, { action: 'send', mode: 'confirm', confirmation: 'EXECUTE' });
+
+  assert.equal(executed, true);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.action.status, 'failed');
+  assert.equal(result.failure.error_code, 'ACTION_NOT_VERIFIED');
 });

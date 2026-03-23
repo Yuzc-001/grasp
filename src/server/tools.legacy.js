@@ -10,6 +10,7 @@ import { rankAffordances } from './affordances.js';
 import { extractMainContent, waitUntilStable } from './content.js';
 import { audit, readLogs } from './audit.js';
 import { verifyTypeResult, verifyGenericAction } from './postconditions.js';
+import { normalizeFormField, summarizeFormFields, buildFormVerification } from './form-tasks.js';
 import { runSearchTaskTool } from './tasks/search-task.js';
 import { TYPE_FAILED } from './error-codes.js';
 import { runVerifiedAction } from '../grasp/verify/pipeline.js';
@@ -522,11 +523,22 @@ export function registerTools(server, state) {
     async ({ hint_id, text, press_enter = false }) => {
       const page = await getActivePage();
       const normalizedHintId = hint_id.toUpperCase();
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = page.url();
       const rebuildHints = createRebuildHints(page, state);
 
       try {
         await typeByHintId(page, normalizedHintId, text, press_enter, { rebuildHints });
-        const verdict = await verifyTypeResult({ page, expectedText: text });
+        await syncPageState(page, state, { force: true });
+        const newDomRevision = state.pageState?.domRevision ?? prevDomRevision;
+        const verdict = await verifyTypeResult({
+          page,
+          expectedText: text,
+          allowPageChange: press_enter,
+          prevUrl,
+          prevDomRevision,
+          newDomRevision,
+        });
         if (!verdict.ok) {
           await audit('type_failed', `[${normalizedHintId}] ${verdict.error_code}`);
           await syncPageState(page, state, { force: true });
@@ -796,35 +808,37 @@ export function registerTools(server, state) {
           return el.getAttribute('data-grasp-id') || null;
         }
 
-        function getFieldLabel(el) {
-          // aria-labelledby
-          const labelledBy = el.getAttribute('aria-labelledby');
-          if (labelledBy) {
-            const text = labelledBy.trim().split(/\s+/)
-              .map(id => document.getElementById(id)?.textContent?.trim() ?? '')
-              .filter(Boolean).join(' ');
-            if (text) return text;
-          }
-          if (el.getAttribute('aria-label')?.trim()) return el.getAttribute('aria-label').trim();
-          // <label for="id">
+        function getLabelForText(el) {
           const id = el.getAttribute('id');
-          if (id) {
-            const lbl = document.querySelector(`label[for="${id}"]`);
-            if (lbl?.textContent?.trim()) return lbl.textContent.trim();
-          }
-          if (el.getAttribute('placeholder')?.trim()) return el.getAttribute('placeholder').trim();
-          if (el.getAttribute('name')?.trim()) return el.getAttribute('name').trim();
-          return el.tagName.toLowerCase();
+          if (!id) return '';
+          const lbl = document.querySelector(`label[for="${id}"]`);
+          return lbl?.textContent?.trim() ?? '';
         }
 
         function describeField(el) {
           const tag = el.tagName.toLowerCase();
           const type = el.getAttribute('type') || (tag === 'select' ? 'select' : tag === 'textarea' ? 'textarea' : tag);
           const required = el.required || el.getAttribute('required') !== null;
-          const hintId = getHintId(el);
-          const label = getFieldLabel(el);
-          const idStr = hintId ? `[${hintId}]` : '(no hint id — call get_hint_map first)';
-          return `  ${idStr} ${label}  (${type}${required ? ', required' : ''})`;
+          return {
+            hint_id: getHintId(el),
+            tag,
+            type,
+            required,
+            value: 'value' in el ? el.value : null,
+            checked: 'checked' in el ? el.checked : null,
+            ariaLabelledByText: (() => {
+              const labelledBy = el.getAttribute('aria-labelledby');
+              if (!labelledBy) return '';
+              return labelledBy.trim().split(/\s+/)
+                .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+                .filter(Boolean)
+                .join(' ');
+            })(),
+            ariaLabel: el.getAttribute('aria-label')?.trim() ?? '',
+            labelForText: getLabelForText(el),
+            placeholder: el.getAttribute('placeholder')?.trim() ?? '',
+            name: el.getAttribute('name')?.trim() ?? '',
+          };
         }
 
         const FIELD_TAGS = new Set(['input', 'textarea', 'select', 'button']);
@@ -882,7 +896,26 @@ export function registerTools(server, state) {
         return textResponse('No form fields found on the current page. Call get_hint_map to see all interactive elements.');
       }
 
-      const lines = groups.flatMap(g => [g.header, ...g.fields, '']);
+      const normalizedGroups = groups.map((group) => ({
+        header: group.header,
+        fields: group.fields.map((field) => {
+          const normalized = normalizeFormField(field);
+          const idStr = normalized.hint_id ? `[${normalized.hint_id}]` : '(no hint id — call get_hint_map first)';
+          return `  ${idStr} ${normalized.label}  (${normalized.type}${normalized.required ? ', required' : ''})`;
+        }),
+      }));
+      const summary = summarizeFormFields(groups.flatMap((group) => group.fields));
+      const verification = buildFormVerification(groups.flatMap((group) => group.fields));
+      const lines = [
+        ...normalizedGroups.flatMap((g) => [g.header, ...g.fields, '']),
+        'Summary:',
+        ...summary.lines.map((line) => `  ${line}`),
+        'Verification:',
+        `  completion_status: ${verification.completion_status}`,
+        `  missing_required: ${verification.summary.missing_required}`,
+        `  risky_pending: ${verification.summary.risky_pending}`,
+        `  unresolved: ${verification.summary.unresolved}`,
+      ];
       return textResponse(lines.join('\n').trimEnd());
     }
   );
@@ -942,13 +975,6 @@ export function registerTools(server, state) {
               hint_id: normalizedHintId,
               reason: err.message,
             },
-          }
-        );
-      }
-    }
-  );
-}
-,
           }
         );
       }

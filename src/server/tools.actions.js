@@ -207,6 +207,8 @@ export function registerActionTools(server, state) {
       const normalizedHintId = String(hint_id).trim();
       const page = await getActivePage();
       await syncPageState(page, state);
+      const prevDomRevision = state.pageState?.domRevision ?? 0;
+      const prevUrl = page.url();
       const rebuildHints = createRebuildHints(page, state);
 
       return runVerifiedAction({
@@ -219,7 +221,17 @@ export function registerActionTools(server, state) {
           await syncPageState(page, state, { force: true });
           return { text, press_enter };
         },
-        verify: async () => verifyTypeResult({ page, expectedText: text }),
+        verify: async () => {
+          const newDomRevision = state.pageState?.domRevision ?? prevDomRevision;
+          return verifyTypeResult({
+            page,
+            expectedText: text,
+            allowPageChange: press_enter,
+            prevUrl,
+            prevDomRevision,
+            newDomRevision,
+          });
+        },
         onFailure: async (failure) => {
           await audit('type_failed', `[${normalizedHintId}] ${failure.error_code}`);
           return buildStructuredError(`Type verification failed for [${normalizedHintId}]`, normalizedHintId, failure);

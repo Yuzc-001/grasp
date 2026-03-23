@@ -29,6 +29,22 @@ test('verifyTypeResult succeeds when expected text is present', async () => {
   assert.deepStrictEqual(result.evidence, { value: 'pi agent 是啥', tag: 'input', isFormField: true });
 });
 
+test('verifyTypeResult succeeds when expected text is present in a contenteditable surface', async () => {
+  const page = createFakePage({
+    evaluate: async () => ({ value: '', text: 'extreme grasp smoke test', tag: 'div', isFormField: true }),
+  });
+
+  const result = await verifyTypeResult({ page, expectedText: 'extreme grasp smoke test' });
+
+  assert.strictEqual(result.ok, true);
+  assert.deepStrictEqual(result.evidence, {
+    value: '',
+    text: 'extreme grasp smoke test',
+    tag: 'div',
+    isFormField: true,
+  });
+});
+
 test('verifyGenericAction passes when DOM or active state changes', async () => {
   const page = createFakePage({
     url: () => 'https://example.com',

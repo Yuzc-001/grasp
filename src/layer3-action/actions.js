@@ -94,6 +94,27 @@ async function locateElement(page, hintId, options = {}) {
   }, id);
 
   const evaluateHint = options.evaluateHint ?? defaultEvaluateHint;
+  const fetchHandle = async (id) => page.$(`[data-grasp-id="${id}"]`);
+  const ensureActionableHandle = async (id, currentInfo) => {
+    let handle = await fetchHandle(id);
+    let box = handle && typeof handle.boundingBox === 'function'
+      ? await handle.boundingBox()
+      : null;
+
+    const actionable = !!(box && box.width > 0 && box.height > 0);
+    if (actionable || typeof options.rebuildHints !== 'function') {
+      return { handle, reboundId: id, reboundInfo: currentInfo };
+    }
+
+    const rebound = await options.rebuildHints(id);
+    if (!rebound?.id || rebound.id === id) {
+      return { handle, reboundId: id, reboundInfo: currentInfo };
+    }
+
+    const reboundInfo = await evaluateHint(rebound.id);
+    const reboundHandle = await fetchHandle(rebound.id);
+    return { handle: reboundHandle, reboundId: rebound.id, reboundInfo };
+  };
 
   let viewportCheck = await evaluateHint(hintId);
   if (viewportCheck === null && typeof options.rebuildHints === 'function') {
@@ -119,7 +140,10 @@ async function locateElement(page, hintId, options = {}) {
     await new Promise((r) => setTimeout(r, 300));
   }
 
-  const el = await page.$(`[data-grasp-id="${hintId}"]`);
+  const actionable = await ensureActionableHandle(hintId, viewportCheck);
+  hintId = actionable.reboundId;
+  viewportCheck = actionable.reboundInfo ?? viewportCheck;
+  const el = actionable.handle;
   if (el === null) {
     throw new Error(`Element "${hintId}" disappeared after scrolling.`);
   }

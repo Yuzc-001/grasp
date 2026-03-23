@@ -4,6 +4,38 @@ import { createHandoffState } from '../grasp/handoff/state.js';
 import { createPageGraspState, applySnapshotToPageGraspState } from '../grasp/page/state.js';
 import { capturePageSnapshot } from '../grasp/page/capture.js';
 
+const TRANSIENT_CONTEXT_ERRORS = [
+  'Execution context was destroyed',
+  'Cannot find context with specified id',
+];
+
+function isTransientExecutionContextError(error) {
+  const message = error?.message ?? '';
+  return TRANSIENT_CONTEXT_ERRORS.some((pattern) => message.includes(pattern));
+}
+
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function retryTransientPageStep(step, { attempts = 3, delayMs = 120 } = {}) {
+  let lastError = null;
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await step();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientExecutionContextError(error) || i === attempts - 1) {
+        throw error;
+      }
+      await sleep(delayMs * (i + 1));
+    }
+  }
+
+  throw lastError;
+}
+
 export function isSafeModeEnabled() {
   return process.env.GRASP_SAFE_MODE !== 'false';
 }
@@ -52,18 +84,20 @@ export async function syncPageState(page, state, { force = false } = {}) {
     state.hintCounters = { B: 0, I: 0, L: 0, S: 0 };
   }
 
-  const webmcp = await probe(page);
-  state.lastUrl = url;
+  await retryTransientPageStep(async () => {
+    const webmcp = await probe(page);
+    state.lastUrl = url;
 
-  if (webmcp.available) {
-    const tools = await listTools(page, webmcp);
-    state.webmcp = { ...webmcp, tools };
-    state.hintMap = [];
-    return state;
-  }
+    if (webmcp.available) {
+      const tools = await listTools(page, webmcp);
+      state.webmcp = { ...webmcp, tools };
+      state.hintMap = [];
+      return;
+    }
 
-  state.webmcp = webmcp;
-  state.hintMap = await buildHintMap(page, state.hintRegistry, state.hintCounters);
+    state.webmcp = webmcp;
+    state.hintMap = await buildHintMap(page, state.hintRegistry, state.hintCounters);
+  });
   return state;
 }
 

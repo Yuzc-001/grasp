@@ -77,7 +77,7 @@ Expected:
 
 Core path:
 
-`entry -> continue -> workspace_inspect -> select_live_item -> draft_action -> execute_action(mode=preview|confirm) -> verify_outcome`
+`entry -> continue -> workspace_inspect -> select_live_item -> workspace_inspect -> draft_action -> workspace_inspect -> execute_action(mode=preview|confirm) -> verify_outcome`
 
 Phase 1 conservative points:
 

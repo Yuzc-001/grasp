@@ -27,6 +27,20 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
+    function getCandidatePriority(el, tag, role, isContentEditable) {
+      const inputType = (el.getAttribute('type') || '').toLowerCase();
+      if (isContentEditable || role === 'textbox' || role === 'searchbox' || role === 'combobox') return 5;
+      if (tag === 'textarea') return 4;
+      if (tag === 'input') {
+        if (['text', 'search', 'email', 'url', 'password', 'number', 'tel', ''].includes(inputType)) return 4;
+        if (['file', 'hidden'].includes(inputType)) return 1;
+        return 3;
+      }
+      if (tag === 'button' || role === 'button') return 2;
+      if (tag === 'a' || role === 'link') return 1;
+      return 0;
+    }
+
     // 1. 遍历 document.body 下所有元素
     const walker = document.createTreeWalker(
       document.body,
@@ -61,20 +75,36 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
       const cx = Math.round(rect.left + rect.width / 2);
       const cy = Math.round(rect.top + rect.height / 2);
 
-      candidates.push({ el, tag, role, cx, cy });
+      candidates.push({
+        el,
+        tag,
+        role,
+        cx,
+        cy,
+        priority: getCandidatePriority(el, tag, role, isContentEditable),
+      });
     }
 
     // 4. 排序：y 优先，x 其次
-    candidates.sort((a, b) => a.cy !== b.cy ? a.cy - b.cy : a.cx - b.cx);
+    candidates.sort((a, b) => {
+      if (a.cy !== b.cy) return a.cy - b.cy;
+      if (a.cx !== b.cx) return a.cx - b.cx;
+      return b.priority - a.priority;
+    });
 
-    // 5. 去重：中心坐标差 < 5px 则跳过（保留先遇到的，即排序后靠前的）
-    const seen = [];
+    // 5. 去重：中心坐标差 < 5px 视为同一交互点，保留更可操作的候选
     const filtered = [];
     for (const c of candidates) {
-      const dup = seen.some(s => Math.abs(s.cx - c.cx) < 5 && Math.abs(s.cy - c.cy) < 5);
-      if (dup) continue;
-      seen.push(c);
-      filtered.push(c);
+      const dupIndex = filtered.findIndex((s) => Math.abs(s.cx - c.cx) < 5 && Math.abs(s.cy - c.cy) < 5);
+      if (dupIndex === -1) {
+        filtered.push(c);
+        continue;
+      }
+
+      const previous = filtered[dupIndex];
+      if (c.priority > previous.priority) {
+        filtered[dupIndex] = c;
+      }
     }
 
     // 6. 分配 ID 并构建 Hint 列表
@@ -191,10 +221,37 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
   return result.hints;
 }
 
+const INPUT_LIKE_TYPES = new Set(['input', 'textarea', 'textbox', 'searchbox', 'combobox']);
+
+function isInputLikeHint(hint = {}) {
+  const type = String(hint.type ?? '').toLowerCase();
+  if (INPUT_LIKE_TYPES.has(type)) return true;
+  if (hint.meta?.contenteditable === true || hint.meta?.contenteditable === 'true') return true;
+  return false;
+}
+
+function normalizeHintLabel(hint = {}) {
+  const candidates = [
+    hint.label,
+    hint.meta?.ariaLabel,
+    hint.meta?.placeholder,
+    hint.meta?.name,
+    hint.meta?.idAttr,
+  ];
+  return candidates
+    .map((value) => String(value ?? '').trim().toLowerCase())
+    .find(Boolean) ?? '';
+}
+
 export function rebindHintCandidate(previous, nextHints) {
   if (!previous) return null;
   const candidates = nextHints.filter(
-    (hint) => hint.type === previous.type && hint.label === previous.label
+    (hint) => {
+      const sameType = hint.type === previous.type;
+      const sameInputFamily = isInputLikeHint(previous) && isInputLikeHint(hint);
+      if (!sameType && !sameInputFamily) return false;
+      return normalizeHintLabel(hint) === normalizeHintLabel(previous);
+    }
   );
   if (candidates.length === 0) return null;
 

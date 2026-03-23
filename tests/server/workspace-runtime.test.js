@@ -278,6 +278,40 @@ test('selectItemByHint rejects the wrong same-label item when hint identity chan
   assert.equal(result.error_code, 'ACTION_NOT_VERIFIED');
 });
 
+test('selectItemByHint rejects label-only success when the hinted target scrolls out of view', async () => {
+  const result = await selectItemByHint({
+    snapshot: {
+      workspace_surface: 'thread',
+      loading_shell: false,
+      live_items: [
+        { label: '李女士', normalized_label: '李女士', hint_id: 'L1', selected: false },
+        { label: '李女士', normalized_label: '李女士', selected: false },
+      ],
+    },
+    clickByHintId: async () => ({ label: '李女士' }),
+    refreshSnapshot: async () => ({
+      workspace_surface: 'thread',
+      loading_shell: false,
+      live_items: [
+        { label: '李女士', normalized_label: '李女士', selected: true },
+      ],
+      active_item: { label: '李女士', normalized_label: '李女士', selected: true },
+      detail_alignment: 'aligned',
+      selection_window: 'visible',
+      composer: { kind: 'chat_composer', draft_present: false },
+      blocking_modals: [],
+      outcome_signals: {
+        delivered: false,
+        composer_cleared: false,
+        active_item_stable: false,
+      },
+    }),
+  }, '李女士');
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'ACTION_NOT_VERIFIED');
+});
+
 test('draftIntoComposer does not send when pressEnter is requested', async () => {
   const calls = [];
   let draftValue = '';

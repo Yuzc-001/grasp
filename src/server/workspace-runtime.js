@@ -81,12 +81,14 @@ export function resolveLiveItem(snapshot, requestedLabel) {
   const normalized = normalizeLabel(requestedLabel);
   const matches = liveItems.filter((item) => normalizeLabel(item?.normalized_label ?? item?.label) === normalized);
   const hintBacked = matches.filter((item) => compactText(item?.hint_id));
+  const identitySensitive = matches.length > 1 && hintBacked.length > 0;
 
   if (hintBacked.length === 1) {
     return {
       item: hintBacked[0],
       ambiguous: false,
       matches,
+      identity_sensitive: identitySensitive,
     };
   }
 
@@ -95,6 +97,7 @@ export function resolveLiveItem(snapshot, requestedLabel) {
       item: matches[0],
       ambiguous: false,
       matches,
+      identity_sensitive: identitySensitive,
     };
   }
 
@@ -103,6 +106,7 @@ export function resolveLiveItem(snapshot, requestedLabel) {
       item: null,
       ambiguous: true,
       matches,
+      identity_sensitive: identitySensitive,
       unresolved: buildUnresolved('ambiguous_item', requestedLabel, hintBacked.length > 0 ? hintBacked : matches),
     };
   }
@@ -112,6 +116,7 @@ export function resolveLiveItem(snapshot, requestedLabel) {
       item: null,
       ambiguous: false,
       matches: [],
+      identity_sensitive: identitySensitive,
       unresolved: buildUnsupportedWorkspace(requestedLabel),
     };
   }
@@ -120,6 +125,7 @@ export function resolveLiveItem(snapshot, requestedLabel) {
     item: null,
     ambiguous: false,
     matches: [],
+    identity_sensitive: identitySensitive,
     unresolved: buildUnresolved('no_live_target', requestedLabel),
   };
 }
@@ -168,6 +174,7 @@ export function createWorkspaceWriteEvidence({ kind, target }) {
 export async function verifySelectionResult({
   snapshot,
   item,
+  identitySensitive = false,
 }) {
   const summary = summarizeWorkspaceSnapshot(snapshot ?? {});
   const liveItems = getLiveItems(snapshot);
@@ -175,16 +182,12 @@ export async function verifySelectionResult({
   const activeItem = pick(snapshot, 'activeItem', 'active_item', null);
   const activeLabel = compactText(activeItem?.label ?? summary.active_item_label ?? '');
   const activeMatch = normalizeLabel(activeLabel) === normalizedLabel;
-  const activeHintMatch = compactText(activeItem?.hint_id) && compactText(activeItem?.hint_id) === compactText(item?.hint_id);
+  const activeHintMatch = Boolean(compactText(activeItem?.hint_id)) && compactText(activeItem?.hint_id) === compactText(item?.hint_id);
   const selectedMatch = liveItems.some((liveItem) => (
     liveItem?.selected === true
     && normalizeLabel(liveItem?.normalized_label ?? liveItem?.label) === normalizedLabel
     && compactText(liveItem?.hint_id) === compactText(item?.hint_id)
   ));
-  const sameLabelCount = liveItems.filter((liveItem) => (
-    normalizeLabel(liveItem?.normalized_label ?? liveItem?.label) === normalizedLabel
-  )).length;
-  const identitySensitive = compactText(item?.hint_id) && sameLabelCount > 1;
   const detailAlignment = pick(snapshot, 'detailAlignment', 'detail_alignment', summary.detail_alignment);
   const selectionWindow = pick(snapshot, 'selectionWindow', 'selection_window', summary.selection_window);
 
@@ -394,6 +397,7 @@ export async function selectItemByHint(runtime, requestedLabel, options = {}) {
     return verifySelectionResult({
       snapshot: refreshedSnapshot,
       item,
+      identitySensitive: resolution.identity_sensitive ?? false,
     });
   });
 }

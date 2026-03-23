@@ -181,7 +181,7 @@ function getSelectionWindow(activeItem, detailPanel, liveItems) {
     return 'virtualized';
   }
 
-  return 'visible';
+  return 'not_found';
 }
 
 function getRecoveryHint(selectionWindow, liveItems, detailPanel) {
@@ -201,7 +201,7 @@ function getRecoveryHint(selectionWindow, liveItems, detailPanel) {
 function getOutcomeSignals(snapshot, composer, activeItem, detailAlignment) {
   const bodyText = pickText(snapshot, 'bodyText', 'body_text').toLowerCase();
   const delivered = bodyText.includes('已发送') || bodyText.includes('发送成功') || bodyText.includes('delivered') || bodyText.includes('sent');
-  const composerCleared = !!composer && composer.draft_present === false && !compactText(composer.draft_text);
+  const composerCleared = delivered;
   const activeItemStable = detailAlignment !== undefined
     ? detailAlignment === 'aligned'
     : !!activeItem && getDetailAlignment(activeItem, getDetailPanel(snapshot)) === 'aligned';
@@ -440,7 +440,7 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       ? (active_item.normalized_label === detail_panel.normalized_label ? 'aligned' : 'mismatch')
       : 'unknown';
     const selection_window = active_item
-      ? (live_items.some((item) => item.selected && item.normalized_label === active_item.normalized_label) ? 'visible' : detail_panel ? 'virtualized' : 'visible')
+      ? (live_items.some((item) => item.selected && item.normalized_label === active_item.normalized_label) ? 'visible' : detail_panel ? 'virtualized' : 'not_found')
       : (detail_panel && live_items.length > 0 ? 'virtualized' : 'not_found');
     const recovery_hint = selection_window === 'virtualized'
       ? 'scroll_list'
@@ -454,7 +454,7 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       || (loadingIndicator && /加载中|请稍候|正在加载/.test(bodyText)));
     const outcome_signals = {
       delivered: /已发送|发送成功|delivered|sent/i.test(bodyText),
-      composer_cleared: !!composer && composer.draft_present === false,
+      composer_cleared: /已发送|发送成功|delivered|sent/i.test(bodyText),
       active_item_stable: !!active_item && detail_alignment === 'aligned' && selection_window === 'visible',
     };
 

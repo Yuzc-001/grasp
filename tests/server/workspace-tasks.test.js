@@ -205,3 +205,63 @@ test('collectVisibleWorkspaceSnapshot ignores generic loading copy without a vis
 
   assert.equal(snapshot.loading_shell, false);
 });
+
+test('collectVisibleWorkspaceSnapshot captures a stable thread surface shape', async () => {
+  const detailHeading = createMockElement({
+    tagName: 'h2',
+    textContent: '李女士',
+  });
+  const detailPanel = createMockElement({
+    tagName: 'aside',
+    classNames: ['detail-panel'],
+    queryMap: {
+      'h1, h2, h3, h4, h5, h6': detailHeading,
+    },
+  });
+
+  const page = createDomPage({
+    bodyText: '李女士 人工智能训练师 按Enter键发送',
+    queryAllMap: {
+      'li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]': [
+        createMockElement({
+          tagName: 'li',
+          attrs: {
+            'data-list-item': 'true',
+          },
+          textContent: '李女士',
+          classNames: ['selected'],
+        }),
+      ],
+      'textarea, input:not([type="hidden"]), [contenteditable="true"], [role="textbox"]': [
+        createMockElement({
+          tagName: 'textarea',
+          attrs: {
+            placeholder: '按Enter键发送',
+          },
+          textContent: '',
+        }),
+      ],
+      'button, [role="button"], input[type="submit"], input[type="button"]': [
+        createMockElement({
+          tagName: 'button',
+          textContent: '发送',
+        }),
+      ],
+      '[role="dialog"], [aria-modal="true"], dialog[open]': [],
+      '[aria-busy="true"], .loading, .skeleton, .spinner': [],
+      '[data-detail-panel], [role="complementary"], .detail-panel, aside': [detailPanel],
+    },
+    queryMap: {
+      '[aria-busy="true"], .loading, .skeleton, .spinner': null,
+    },
+  });
+
+  const snapshot = await collectVisibleWorkspaceSnapshot(page);
+
+  assert.equal(snapshot.workspace_surface, 'thread');
+  assert.equal(snapshot.live_items.length, 1);
+  assert.equal(snapshot.active_item.label, '李女士');
+  assert.equal(snapshot.action_controls.length, 1);
+  assert.equal(snapshot.composer.kind, 'chat_composer');
+  assert.equal(snapshot.detail_alignment, 'aligned');
+});

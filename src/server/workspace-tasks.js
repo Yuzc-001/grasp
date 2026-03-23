@@ -313,17 +313,25 @@ export function buildWorkspaceVerification(snapshot = {}) {
     active_item_stable: false,
   };
   const workspaceSurface = summary.workspace_surface ?? pick(snapshot, 'workspaceSurface', 'workspace_surface', null);
-  const readyForNextAction = loadingShell
+  const composer = getComposer(snapshot);
+  const actionControls = getActionControls(snapshot);
+  const activeItemStable = outcomeSignals?.active_item_stable === true;
+  const hasReliableSendControl = actionControls.some((control) => control?.action_kind === 'send' && compactText(control?.label));
+  const readyForNextAction = loadingShell || blockingModalPresent
     ? 'workspace_inspect'
-    : detailAlignment === 'mismatch'
+    : !activeItemLabel
       ? 'select_live_item'
-      : !activeItemLabel
+      : detailAlignment === 'mismatch'
         ? 'select_live_item'
-        : draftPresent
-          ? 'execute_action'
-          : workspaceSurface === 'thread'
-            ? 'draft_action'
-            : 'workspace_inspect';
+        : !activeItemStable
+          ? 'workspace_inspect'
+          : !composer
+            ? 'workspace_inspect'
+            : draftPresent
+              ? (hasReliableSendControl ? 'execute_action' : 'workspace_inspect')
+              : workspaceSurface === 'thread' && hasReliableSendControl
+                ? 'draft_action'
+                : 'workspace_inspect';
 
   return {
     active_item_label: activeItemLabel,

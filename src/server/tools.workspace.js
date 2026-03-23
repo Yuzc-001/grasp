@@ -554,29 +554,36 @@ function registerWorkspaceVerifyOutcomeTool(server, state, deps) {
       const page = await getPage();
       const { snapshot, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
       const verification = buildWorkspaceVerification(snapshot);
-      const suggestedNextAction = verification.ready_for_next_action;
+      const status = getWorkspaceStatus(state);
+      const suggestedNextAction = status === 'direct' ? verification.ready_for_next_action : 'request_handoff';
+      const publicVerification = status === 'direct'
+        ? verification
+        : {
+            ...verification,
+            ready_for_next_action: 'request_handoff',
+          };
       const pageInfoAfter = {
         title: await page.title(),
         url: page.url(),
       };
 
       return buildGatewayResponse({
-        status: getWorkspaceStatus(state),
+        status,
         page: toGatewayPage(pageInfoAfter, state),
         result: {
           task_kind: 'workspace',
-          verification,
+          verification: publicVerification,
           suggested_next_action: suggestedNextAction,
-          summary: `Workspace ${workspaceSurface} • ${verification.active_item_label ?? 'no active item'}`,
+          summary: `Workspace ${workspaceSurface} • ${publicVerification.active_item_label ?? 'no active item'}`,
         },
         continuation: getWorkspaceContinuation(state, suggestedNextAction),
         evidence: {
           workspace_surface: workspaceSurface,
-          active_item_label: verification.active_item_label,
-          loading_shell: verification.loading_shell,
-          blocking_modal_present: verification.blocking_modal_present,
-          detail_alignment: verification.detail_alignment,
-          ready_for_next_action: verification.ready_for_next_action,
+          active_item_label: publicVerification.active_item_label,
+          loading_shell: publicVerification.loading_shell,
+          blocking_modal_present: publicVerification.blocking_modal_present,
+          detail_alignment: publicVerification.detail_alignment,
+          ready_for_next_action: publicVerification.ready_for_next_action,
         },
       });
     }

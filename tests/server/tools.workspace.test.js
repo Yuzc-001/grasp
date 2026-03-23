@@ -1060,6 +1060,8 @@ test('verify_outcome preserves blocked and gated safety behavior without mutatin
 
     assert.equal(result.meta.status, testCase.expectedStatus);
     assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
+    assert.equal(result.meta.result.suggested_next_action, 'request_handoff');
+    assert.equal(result.meta.result.verification.ready_for_next_action, 'request_handoff');
     assert.deepEqual(state, before);
     assert.deepEqual(mutations, []);
   }

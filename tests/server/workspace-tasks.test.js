@@ -323,27 +323,87 @@ test('summarizeWorkspaceSnapshot keeps active item unstable when selection windo
 });
 
 test('buildWorkspaceVerification returns active item, draft, delivery, blocking, and readiness fields', () => {
-  const result = buildWorkspaceVerification({
-    workspace_surface: 'thread',
-    active_item: { label: '李女士' },
-    composer: { kind: 'chat_composer', draft_present: false },
-    action_controls: [{ label: '发送', action_kind: 'send' }],
-    outcome_signals: { delivered: true, composer_cleared: true, active_item_stable: true },
-    blocking_modals: [{ label: '权限提示' }],
-    loading_shell: false,
-    detail_alignment: 'aligned',
-  });
+  const cases = [
+    {
+      name: 'blocking_modal',
+      snapshot: {
+        workspace_surface: 'thread',
+        active_item: { label: '李女士' },
+        composer: { kind: 'chat_composer', draft_present: false },
+        action_controls: [{ label: '发送', action_kind: 'send' }],
+        outcome_signals: { delivered: true, composer_cleared: true, active_item_stable: true },
+        blocking_modals: [{ label: '权限提示' }],
+        loading_shell: false,
+        detail_alignment: 'aligned',
+      },
+      expected: 'workspace_inspect',
+    },
+    {
+      name: 'missing_send',
+      snapshot: {
+        workspace_surface: 'thread',
+        active_item: { label: '李女士' },
+        composer: { kind: 'chat_composer', draft_present: false },
+        action_controls: [{ label: '取消', action_kind: 'dismiss' }],
+        outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: true },
+        blocking_modals: [],
+        loading_shell: false,
+        detail_alignment: 'aligned',
+      },
+      expected: 'workspace_inspect',
+    },
+    {
+      name: 'unstable_active_item',
+      snapshot: {
+        workspace_surface: 'thread',
+        active_item: { label: '李女士' },
+        composer: { kind: 'chat_composer', draft_present: false },
+        action_controls: [{ label: '发送', action_kind: 'send' }],
+        outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: false },
+        blocking_modals: [],
+        loading_shell: false,
+        detail_alignment: 'aligned',
+      },
+      expected: 'workspace_inspect',
+    },
+    {
+      name: 'no_composer',
+      snapshot: {
+        workspace_surface: 'thread',
+        active_item: { label: '李女士' },
+        composer: null,
+        action_controls: [{ label: '发送', action_kind: 'send' }],
+        outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: true },
+        blocking_modals: [],
+        loading_shell: false,
+        detail_alignment: 'aligned',
+      },
+      expected: 'workspace_inspect',
+    },
+    {
+      name: 'draft_ready',
+      snapshot: {
+        workspace_surface: 'thread',
+        active_item: { label: '李女士' },
+        composer: { kind: 'chat_composer', draft_present: false },
+        action_controls: [{ label: '发送', action_kind: 'send' }],
+        outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: true },
+        blocking_modals: [],
+        loading_shell: false,
+        detail_alignment: 'aligned',
+      },
+      expected: 'draft_action',
+    },
+  ];
 
-  assert.equal(result.active_item_label, '李女士');
-  assert.equal(result.draft_present, false);
-  assert.equal(result.delivered, true);
-  assert.equal(result.loading_shell, false);
-  assert.equal(result.blocking_modal_present, true);
-  assert.equal(result.detail_alignment, 'aligned');
-  assert.deepEqual(result.outcome_signals, {
-    delivered: true,
-    composer_cleared: true,
-    active_item_stable: true,
-  });
-  assert.equal(result.ready_for_next_action, 'draft_action');
+  for (const testCase of cases) {
+    const result = buildWorkspaceVerification(testCase.snapshot);
+
+    assert.equal(result.active_item_label, '李女士', testCase.name);
+    assert.equal(result.draft_present, false, testCase.name);
+    assert.equal(result.loading_shell, false, testCase.name);
+    assert.equal(result.blocking_modal_present, testCase.name === 'blocking_modal', testCase.name);
+    assert.equal(result.detail_alignment, 'aligned', testCase.name);
+    assert.equal(result.ready_for_next_action, testCase.expected, testCase.name);
+  }
 });

@@ -307,30 +307,6 @@ export function registerWorkspaceTools(server, state, deps = {}) {
       const page = await getPage();
       const { pageInfo, snapshot, workspace, workspaceSummary, workspaceSurface } = await loadWorkspacePageContext(page, state, syncState, collectSnapshot);
       const status = getWorkspaceStatus(state);
-
-      if (status !== 'direct') {
-        return buildGatewayResponse({
-          status,
-          page: toGatewayPage(pageInfo, state),
-          result: {
-            task_kind: 'workspace',
-            action: {
-              kind: 'select_live_item',
-              status: 'blocked',
-            },
-            workspace,
-            summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,
-          },
-          continuation: getWorkspaceContinuation(state, 'workspace_inspect'),
-          evidence: {
-            workspace_surface: workspaceSurface,
-            active_item_label: workspaceSummary.active_item_label ?? null,
-            loading_shell: workspaceSummary.loading_shell ?? false,
-            blocking_modal_count: workspaceSummary.blocking_modal_count ?? 0,
-          },
-        });
-      }
-
       const rebuildHints = createWorkspaceRebuildHints(page, state, syncState);
       const selection = await selectWorkspaceItem({
         state,
@@ -380,16 +356,12 @@ export function registerWorkspaceTools(server, state, deps = {}) {
         page: toGatewayPage(pageInfoAfter, state),
         result: {
           task_kind: 'workspace',
+          ...selection,
           action: {
             kind: 'select_live_item',
             status: selection.status,
           },
-          selected_item: selection.selected_item,
-          active_item: selection.active_item,
-          detail_alignment: selection.detail_alignment,
           workspace: refreshedView.workspace,
-          snapshot: refreshedSnapshot,
-          selection_evidence: selection.selection_evidence,
           summary: `Workspace ${refreshedView.workspaceSurface} • ${selection.active_item?.label ?? selection.selected_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? 'no active item'}`,
         },
         continuation: getWorkspaceContinuation(state, 'workspace_inspect'),

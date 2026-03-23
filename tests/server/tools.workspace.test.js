@@ -238,6 +238,7 @@ test('workspace action tools select live items directly while draft and execute 
   assert.equal(directResults[0].meta.continuation.suggested_next_action, 'workspace_inspect');
   assert.equal(directResults[1].meta.continuation.suggested_next_action, 'workspace_inspect');
   assert.equal(directResults[2].meta.continuation.suggested_next_action, 'workspace_inspect');
+  assert.equal(directResults[0].meta.result.status, 'selected');
   assert.deepEqual(directResults.map((result) => result.meta.result.action.status), ['selected', 'delegated', 'delegated']);
   assert.equal(directResults[0].meta.result.selected_item.label, '李女士');
   assert.equal(directResults[0].meta.result.active_item.label, '李女士');
@@ -275,7 +276,50 @@ test('workspace action tools select live items directly while draft and execute 
 
     assert.equal(result.meta.status, 'handoff_required');
     assert.equal(result.meta.continuation.suggested_next_action, 'request_handoff');
+    if (toolName === 'select_live_item') {
+      assert.equal(result.meta.result.status, 'blocked');
+      assert.equal(result.meta.result.active_item.label, '李女士');
+      assert.notEqual(result.meta.result.detail_alignment, undefined);
+      assert.ok(result.meta.result.snapshot);
+      assert.ok(result.meta.result.selection_evidence);
+    }
   }
 
   assert.deepEqual(blockedMutations, []);
+
+  const gatedCalls = [];
+  const gatedServer = { registerTool(name, spec, handler) { gatedCalls.push({ name, handler }); } };
+  const gatedState = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: true },
+    handoff: { state: 'idle' },
+  };
+  const gatedMutations = [];
+
+  registerWorkspaceTools(gatedServer, gatedState, {
+    getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'thread',
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      composer: { kind: 'chat_composer', draft_present: true },
+      action_controls: [{ label: '发送', action_kind: 'send' }],
+      blocking_modals: [],
+      loading_shell: false,
+      summary: { active_item_label: '李女士', draft_present: true, loading_shell: false },
+    }),
+    selectLiveItem: async () => gatedMutations.push('select_live_item_mutated'),
+    draftAction: async () => gatedMutations.push('draft_action_mutated'),
+    executeAction: async () => gatedMutations.push('execute_action_mutated'),
+  });
+
+  const gatedResult = await gatedCalls.find((entry) => entry.name === 'select_live_item').handler({ item: '李女士' });
+  assert.equal(gatedResult.meta.status, 'gated');
+  assert.equal(gatedResult.meta.continuation.suggested_next_action, 'request_handoff');
+  assert.equal(gatedResult.meta.result.status, 'blocked');
+  assert.equal(gatedResult.meta.result.active_item.label, '李女士');
+  assert.notEqual(gatedResult.meta.result.detail_alignment, undefined);
+  assert.ok(gatedResult.meta.result.snapshot);
+  assert.ok(gatedResult.meta.result.selection_evidence);
+  assert.deepEqual(gatedMutations, []);
 });

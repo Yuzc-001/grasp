@@ -226,6 +226,27 @@ function toPublicWorkspaceSummary(summary, snapshot) {
   };
 }
 
+function formatWorkspaceSurfaceLabel(workspaceSurface) {
+  return String(workspaceSurface ?? 'unknown')
+    .replace(/_/g, ' ')
+    .trim();
+}
+
+function getWorkspaceSummaryLabel(workspace, workspaceSummary) {
+  const activeLabel = String(
+    workspaceSummary?.active_item_label
+      ?? workspace?.active_item?.label
+      ?? workspace?.live_items?.find((item) => item?.selected === true)?.label
+      ?? ''
+  ).replace(/\s+/g, ' ').trim();
+
+  return activeLabel || 'no active item';
+}
+
+function formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary) {
+  return `Workspace ${formatWorkspaceSurfaceLabel(workspaceSurface)} • ${getWorkspaceSummaryLabel(workspace, workspaceSummary)}`;
+}
+
 function getWorkspaceNextAction(snapshot) {
   const summary = pick(snapshot, 'summary', 'summary', null);
   const loadingShell = getLoadingShell(snapshot) || summary?.loading_shell === true;
@@ -391,7 +412,7 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
             status: status === 'direct' ? (delegated ? 'delegated' : 'unimplemented') : 'blocked',
           },
           workspace,
-          summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
         },
         continuation: getWorkspaceContinuation(state, continuationAction),
         evidence: {
@@ -441,7 +462,7 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
           },
           snapshot: workspace,
             workspace,
-            summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,
+            summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
           },
           continuation: getWorkspaceContinuation(state, continuationAction),
           evidence: {
@@ -488,7 +509,7 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
           },
           snapshot: publicSnapshot,
           workspace: publicSnapshot,
-          summary: `Workspace ${refreshedView.workspaceSurface} • ${refreshedView.workspaceSummary.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(refreshedView.workspaceSurface, publicSnapshot, refreshedView.workspaceSummary),
         },
         continuation: getWorkspaceContinuation(state, 'workspace_inspect'),
         evidence: {
@@ -568,7 +589,7 @@ function registerWorkspaceExecuteActionTool(server, state, deps) {
           },
           snapshot: finalView.workspace,
           workspace: finalView.workspace,
-          summary: `Workspace ${finalView.workspaceSurface} • ${finalView.workspaceSummary.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(finalView.workspaceSurface, finalView.workspace, finalView.workspaceSummary),
         },
         continuation: getWorkspaceContinuation(state, continuationAction),
         evidence: {
@@ -622,7 +643,7 @@ function registerWorkspaceVerifyOutcomeTool(server, state, deps) {
           task_kind: 'workspace',
           verification: publicVerification,
           suggested_next_action: suggestedNextAction,
-          summary: `Workspace ${workspaceSurface} • ${publicVerification.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(workspaceSurface, null, publicVerification),
         },
         continuation: getWorkspaceContinuation(state, suggestedNextAction),
         evidence: {
@@ -659,7 +680,7 @@ export function registerWorkspaceTools(server, state, deps = {}) {
         result: {
           task_kind: 'workspace',
           workspace,
-          summary: `Workspace ${workspaceSurface} • ${workspaceSummary.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
         },
         continuation: getWorkspaceContinuation(state, getWorkspaceNextAction(snapshot)),
         evidence: {
@@ -755,7 +776,10 @@ export function registerWorkspaceTools(server, state, deps = {}) {
             status: selection.status,
           },
           workspace: publicSnapshot,
-          summary: `Workspace ${refreshedView.workspaceSurface} • ${selection.active_item?.label ?? selection.selected_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? 'no active item'}`,
+          summary: formatWorkspaceResultSummary(refreshedView.workspaceSurface, publicSnapshot, {
+            ...refreshedView.workspaceSummary,
+            active_item_label: selection.active_item?.label ?? selection.selected_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? null,
+          }),
         },
         continuation: getWorkspaceContinuation(state, 'workspace_inspect'),
         evidence: {

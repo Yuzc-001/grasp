@@ -141,6 +141,35 @@ test('workspace_inspect prefers select_live_item when there is no active item ev
   assert.equal(result.meta.continuation.suggested_next_action, 'select_live_item');
 });
 
+test('workspace_inspect summary prefers the selected live item label on list surfaces', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'list', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  registerWorkspaceTools(server, state, {
+    getActivePage: async () => ({ title: async () => '公众号', url: () => 'https://mp.weixin.qq.com/cgi-bin/home?t=home/index' }),
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'list',
+      live_items: [{ label: '首页', selected: true }, { label: '新的功能', selected: false }],
+      active_item: null,
+      composer: null,
+      action_controls: [],
+      blocking_modals: [],
+      loading_shell: false,
+      summary: { active_item_label: null, draft_present: false, loading_shell: false },
+    }),
+  });
+
+  const tool = calls.find((entry) => entry.name === 'workspace_inspect');
+  const result = await tool.handler({});
+
+  assert.equal(result.meta.result.summary, 'Workspace list • 首页');
+});
+
 test('workspace_inspect does not suggest execute_action when blockers are visible or send controls are missing', async () => {
   const blockerCalls = [];
   const blockerServer = { registerTool(name, spec, handler) { blockerCalls.push({ name, handler }); } };

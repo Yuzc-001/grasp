@@ -1,7 +1,7 @@
 {
   "name": "grasp",
-  "version": "0.55.0",
-  "description": "AI browser gateway with persistent sessions, verified actions, and recoverable handoff.",
+  "version": "0.6.0",
+  "description": "Route-aware Agent Web Runtime with persistent sessions, verified actions, and recoverable handoff.",
   "main": "index.js",
   "bin": {
     "grasp": "./index.js"
@@ -29,7 +29,8 @@
   },
   "keywords": [
     "mcp",
-    "ai-browser-gateway",
+    "route-aware-agent-web-runtime",
+    "browser-runtime-for-agents",
     "browser-runtime",
     "session-continuity",
     "agent-browser"

@@ -43,10 +43,13 @@ async function launchChrome(chromePath, cdpUrl) {
 export async function runConnect() {
   const config = await readConfig();
   const cdpUrl = process.env.CHROME_CDP_URL || config.cdpUrl;
+  const userDataDir = join(homedir(), 'chrome-grasp');
 
   console.log('');
-  console.log('  Grasp Connect');
+  console.log('  Grasp Runtime Setup');
   console.log('  ' + '─'.repeat(44));
+  console.log('  Bring a real Chrome session into the runtime.');
+  console.log('  One URL, one best path.');
   console.log('');
 
   // Step 1: detect Chrome
@@ -65,16 +68,16 @@ export async function runConnect() {
 
   // Step 2: check or launch Chrome with CDP
   console.log('');
-  console.log(`  ${STEP_WAIT} Connecting to Chrome at ${cdpUrl} ...`);
+  console.log(`  ${STEP_WAIT} Ensuring browser runtime at ${cdpUrl} ...`);
   let chromeInfo = await pingChrome(cdpUrl);
 
   if (!chromeInfo) {
-    console.log(`  ${STEP_WAIT} Chrome not running, launching...`);
+    console.log(`  ${STEP_WAIT} Chrome not running, launching dedicated profile...`);
     chromeInfo = await launchChrome(chromePath, cdpUrl);
   }
 
   if (!chromeInfo) {
-    console.log(`  ${STEP_FAIL} Failed to connect to Chrome`);
+    console.log(`  ${STEP_FAIL} Failed to bring the browser runtime online`);
     console.log('');
     console.log('  Try running manually:');
     if (platform() === 'win32') {
@@ -86,7 +89,8 @@ export async function runConnect() {
     process.exit(1);
   }
 
-  console.log(`  ${STEP_OK} Chrome connected  (${chromeInfo.Browser})`);
+  console.log(`  ${STEP_OK} Browser runtime ready  (${chromeInfo.Browser})`);
+  console.log(`       Profile: ${userDataDir}`);
 
   // Step 3: save cdpUrl to config
   await writeConfig({ cdpUrl });
@@ -97,19 +101,19 @@ export async function runConnect() {
     const tabs = await tabsRes.json();
     const tab = tabs.find(t => t.type === 'page' && t.url && !t.url.startsWith('chrome://'));
     if (tab) {
-      console.log(`  ${STEP_OK} Active tab: ${tab.title?.slice(0, 50) || tab.url}`);
+      console.log(`  ${STEP_OK} Current page: ${tab.title?.slice(0, 50) || tab.url}`);
     }
   } catch { /* ignore */ }
 
   // Step 5: auto-configure AI clients
   console.log('');
-  console.log(`  ${STEP_WAIT} Detecting AI clients...`);
+  console.log(`  ${STEP_WAIT} Connecting AI clients...`);
   const clients = detectClients();
 
   if (clients.length === 0) {
     console.log(`  ${STEP_FAIL} No AI clients found`);
     console.log('');
-    console.log('  Add manually to your AI client config:');
+    console.log('  Add Grasp manually to your AI client config:');
     console.log('    { "mcpServers": { "grasp": { "command": "npx", "args": ["-y", "grasp"] } } }');
   } else {
     const results = await autoConfigureAll(clients);
@@ -135,6 +139,10 @@ export async function runConnect() {
 
   console.log('');
   console.log('  ' + '─'.repeat(44));
-  console.log('  Done. Tell your AI: "call get_status" to verify.');
+  console.log('  Runtime ready. First win:');
+  console.log('    1. Tell your AI: "call get_status"');
+  console.log('    2. Then: "use entry(url, intent) on a real page"');
+  console.log('    3. Then: "inspect, then extract or continue"');
+  console.log('    4. Then: "explain_route or grasp explain"');
   console.log('');
 }

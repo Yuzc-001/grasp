@@ -119,6 +119,10 @@ function hasThreadContextText(text) {
     || text.includes('对话');
 }
 
+function isComposerSurface(workspaceSurface) {
+  return workspaceSurface === 'thread' || workspaceSurface === 'composer';
+}
+
 function hasSendActionControl(actionControls) {
   return actionControls.some((control) => {
     const label = normalizeLabel(control?.label);
@@ -389,7 +393,7 @@ export function buildWorkspaceVerification(snapshot = {}) {
             ? 'workspace_inspect'
             : draftPresent
               ? (hasReliableSendControl ? 'execute_action' : 'workspace_inspect')
-              : workspaceSurface === 'thread'
+              : isComposerSurface(workspaceSurface)
                 ? 'draft_action'
                 : 'workspace_inspect';
 
@@ -438,6 +442,11 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       return /\b(delivered|sent)\b/i.test(text);
     }
 
+    function hasEnglishComposerPromptText(text) {
+      return /\b(type|write|send)?\s*(a\s*)?(message|reply)\b/i.test(text)
+        || /\bchat\b/i.test(text);
+    }
+
     function getHintId(el) {
       return el.getAttribute('data-grasp-id') || null;
     }
@@ -479,6 +488,24 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
         || el.classList.contains('workspace-item--selected');
     }
 
+    function isButtonLike(el) {
+      return el.matches('button, [role="button"], input[type="submit"], input[type="button"]');
+    }
+
+    function isActionLikeLabel(label) {
+      const text = normalizeLabel(label);
+      return text.includes('发送')
+        || text.includes('send')
+        || text.includes('回复')
+        || text.includes('reply')
+        || text.includes('提交')
+        || text.includes('submit')
+        || text.includes('取消')
+        || text.includes('cancel')
+        || text.includes('关闭')
+        || text.includes('close');
+    }
+
     const structuredItemSelector = 'li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]';
     const navLeafSelector = 'a, [role="link"], [role="menuitem"], [role="tab"], button, [role="button"]';
 
@@ -491,11 +518,18 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
       if (!el.matches(navLeafSelector)) return false;
       const label = getText(el);
       if (!label || label.length > 60) return false;
+      const selectedState = el.getAttribute('aria-current') || el.getAttribute('aria-selected') === 'true';
+      const structuredNav = Boolean(el.closest('nav, [role="navigation"], [role="menu"], [role="tablist"]'));
+      const looseNav = structuredNav || Boolean(el.closest('aside, header'));
+
+      if (isButtonLike(el)) {
+        if (isActionLikeLabel(label)) return false;
+        return Boolean(structuredNav || selectedState);
+      }
 
       return Boolean(
-        el.closest('nav, aside, [role="navigation"], [role="menu"], [role="tablist"], header')
-        || el.getAttribute('aria-current')
-        || el.getAttribute('aria-selected') === 'true'
+        looseNav
+        || selectedState
       );
     }
 
@@ -541,16 +575,18 @@ export async function collectVisibleWorkspaceSnapshot(page, state) {
         visible.getAttribute('aria-label'),
         visible.getAttribute('title'),
       ].filter(Boolean).join(' ')).toLowerCase();
-      const messageHints = ['输入消息', '发消息', '发送消息', '回复', '说点什么', '写点什么', '输入内容', '按enter键发送', '聊天'];
-      const hasHintText = messageHints.some((hint) => hintText.includes(hint));
+      const messageHints = ['输入消息', '发消息', '发送消息', '回复', '说点什么', '写点什么', '输入内容', '按enter键发送', '聊天', 'type a message', 'write a message', 'send a message', 'write a reply', 'type your reply'];
+      const hasVisibleSendActionControl = [...document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')]
+        .filter(isVisible)
+        .some((el) => {
+          const label = normalizeLabel(getText(el));
+          return label.includes('发送') || label.includes('send') || label.includes('回复') || label.includes('reply') || label.includes('提交') || label.includes('submit');
+        });
+      const hasHintText = messageHints.some((hint) => hintText.includes(hint))
+        || (hasVisibleSendActionControl && hasEnglishComposerPromptText(hintText));
       const hasPromptAndSend = (
-        hasThreadPromptBodyText
-        && [...document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')]
-          .filter(isVisible)
-          .some((el) => {
-            const label = normalizeLabel(getText(el));
-            return label.includes('发送') || label.includes('send') || label.includes('回复') || label.includes('提交');
-          })
+        (hasThreadPromptBodyText || hasEnglishComposerPromptText(bodyText))
+        && hasVisibleSendActionControl
       );
       if (!hasHintText && !hasPromptAndSend) {
         return null;

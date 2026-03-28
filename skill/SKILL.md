@@ -1,11 +1,11 @@
 ---
 name: grasp
-description: Use when an agent needs the Grasp Agent Web Runtime for real browser work or public-web extraction through one interface with the Runtime Engine and a thin Data Engine read seam. Requires the Grasp MCP server to be reachable; `npx grasp` or `grasp connect` can bootstrap the local runtime when needed.
+description: Use when an agent needs the Grasp route-aware Agent Web Runtime for real browser work or public-web extraction through one interface with public modes over the Runtime Engine and a thin Data Engine read seam. Requires the Grasp MCP server to be reachable; `npx grasp` or `grasp connect` can bootstrap the local runtime when needed.
 ---
 
-# Grasp — Agent Web Runtime
+# Grasp — Route-Aware Agent Web Runtime
 
-Grasp gives the AI an Agent Web Runtime backed by a persistent Chrome profile (`chrome-grasp`). Log in once; sessions survive every run and can be recovered after handoff.
+Grasp gives the AI a route-aware web runtime backed by a persistent Chrome profile (`chrome-grasp`). Log in once; sessions survive every run, route decisions stay explainable, and work can be recovered after handoff.
 
 ## Bootstrap
 
@@ -25,14 +25,18 @@ npx grasp
 
 That bootstrap step also establishes the local Chrome/CDP connection Grasp needs. Treat that as bootstrap plumbing, not as a separate manual prerequisite in the normal local path.
 
-For the canonical product-layer mapping, see [Agent Web Runtime](../docs/product/browser-runtime-for-agents.md).
+For the canonical product-layer mapping, see [Browser Runtime for Agents](../docs/product/browser-runtime-for-agents.md).
 
-## Core Pattern
+## Preferred Path
+
+Use Grasp as a runtime, not a bag of tools.
 
 ```
-1. entry(url)              → enter with session-aware strategy
-2. inspect()               → see whether the page is readable or gated
-3. extract()               → read content or continue with runtime tools
+1. entry(url, intent)      → choose the route and enter with evidence
+2. inspect()               → see whether the page is readable or gated on that route
+3. extract() or continue() → read content or choose the next step
+4. explain_route()         → explain why that route was selected
+5. if blocked              → handoff, resume, and continue in the same session
 ```
 
 Repeat the loop until the task is done. Use `get_page_summary` or `screenshot` to verify results.
@@ -48,16 +52,25 @@ The same interface keeps `Runtime Engine` first-class. In this slice, `Data Engi
 
 That keeps the product from collapsing into either a single BOSS-style workflow or a scraping-only story, without overstating `Data Engine` as a fully delivered separate backend.
 
+Public route modes:
+
+- `public_read`
+- `live_session`
+- `workspace_runtime`
+- `form_runtime`
+- `handoff`
+
 Use the public MCP tools first:
 
-- `entry` enters a URL with session-aware strategy
+- `entry` enters a URL with intent and route evidence
 - `inspect` reports whether the page is readable, gated, or still waiting on recovery
 - `extract` returns the page content in a usable form
 - `continue` decides the next step without firing a browser action
+- `explain_route` explains why the runtime chose the current route
 
 Prefer real browsing and the current live page/session before falling back to heavier observation or search-like shortcuts.
 
-If the public runtime surface is enough, stay there. The lower-level primitives below are only for advanced control when the default runtime surface is not enough.
+If the public runtime surface is enough, stay there. Do not drop to lower-level primitives just because they exist. The sections below are only for advanced control when the default runtime path is not enough.
 
 ## Lower-Level Primitives
 

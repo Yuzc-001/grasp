@@ -61,15 +61,19 @@ function isDateLikeField(field) {
   return ['date', 'datetime-local', 'month', 'week', 'time'].includes(type);
 }
 
+function isEditableField(field) {
+  return field?.disabled !== true && field?.readOnly !== true && field?.readonly !== true;
+}
+
 function getNextVerifyAction(snapshot) {
   const fields = Array.isArray(snapshot?.fields) ? snapshot.fields : [];
-  if (fields.some((field) => field.risk_level === 'safe' && field.current_state !== 'filled' && isTextLikeField(field))) {
+  if (fields.some((field) => field.risk_level === 'safe' && field.current_state !== 'filled' && isTextLikeField(field) && isEditableField(field))) {
     return 'fill_form';
   }
-  if (fields.some((field) => field.risk_level === 'review' && field.current_state !== 'filled' && isDateLikeField(field))) {
+  if (fields.some((field) => field.risk_level === 'review' && field.current_state !== 'filled' && isDateLikeField(field) && isEditableField(field))) {
     return 'set_date';
   }
-  if (fields.some((field) => field.risk_level === 'review' && field.current_state !== 'filled')) {
+  if (fields.some((field) => field.risk_level === 'review' && field.current_state !== 'filled' && !isDateLikeField(field) && isEditableField(field))) {
     return 'set_option';
   }
   return 'safe_submit';
@@ -91,9 +95,11 @@ async function setControlByField(page, field, value) {
     );
     if (!target) return { ok: false, reason: 'no_live_target' };
     if (target.tagName.toLowerCase() !== 'select') return { ok: false, reason: 'unsupported_widget' };
+    if (target.disabled || target.readOnly) return { ok: false, reason: 'field_not_editable' };
 
     const option = [...target.options].find((item) => item.value === nextValue || item.textContent?.trim() === nextValue);
     if (!option) return { ok: false, reason: 'unsupported_widget' };
+    if (target.value === option.value) return { ok: false, reason: 'no_effect' };
 
     target.value = option.value;
     target.dispatchEvent(new Event('input', { bubbles: true }));
@@ -123,11 +129,15 @@ async function setDateByField(page, field, value) {
     if (!['date', 'datetime-local', 'month', 'week', 'time'].includes(type)) {
       return { ok: false, reason: 'unsupported_widget' };
     }
+    if (target.disabled || target.readOnly) return { ok: false, reason: 'field_not_editable' };
+    if (target.value === nextValue) return { ok: false, reason: 'no_effect' };
 
     target.value = nextValue;
     target.dispatchEvent(new Event('input', { bubbles: true }));
     target.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true };
+    return target.value === nextValue
+      ? { ok: true }
+      : { ok: false, reason: 'no_effect' };
   }, {
     hintId: field.hint_id ?? null,
     id: field.id ?? null,

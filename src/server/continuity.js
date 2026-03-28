@@ -193,8 +193,10 @@ export async function assessGatewayContinuation(page, state) {
     || workspaceHintItems.length > 0;
   const suggestedDirectAction = workspaceLike
     ? 'workspace_inspect'
-    : pageState.currentRole === 'form'
+    : pageState.currentRole === 'form' || pageState.currentRole === 'auth'
       ? 'form_inspect'
+      : continuation.suggested_next_action === 'needs_confirmation'
+        ? 'extract'
       : continuation.suggested_next_action;
 
   if (handoffState === 'resumed_verified' || handoffState === 'resumed_unverified') {

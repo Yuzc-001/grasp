@@ -9,6 +9,10 @@ import { enterWithStrategy } from './tools.strategy.js';
 import { readBossFastPath } from './fast-path-router.js';
 import { buildPageProjection } from './page-projection.js';
 import { selectEngine } from './engine-selection.js';
+import { decideRoute, resolveRouteIntent } from './route-policy.js';
+import { auditRouteDecision, readLatestRouteDecision } from './audit.js';
+import { textResponse } from './responses.js';
+import { ROUTE_BLOCKED } from './error-codes.js';
 
 function toGatewayPage({ title, url, pageState }, state, { preferCurrentUrl = false } = {}) {
   const pageUrl = preferCurrentUrl
@@ -62,6 +66,16 @@ function getGatewayContinuation(state, suggestedNextAction) {
 function buildGatewayOutcome(outcome) {
   const strategy = outcome.preflight?.recommended_entry_strategy ?? 'direct';
   const trust = outcome.preflight?.session_trust ?? 'medium';
+  const handoffState = outcome.handoff?.state ?? 'idle';
+  const pageState = outcome.pageState ?? {};
+
+  if (isBlockedHandoffState(handoffState) || pageState.riskGateDetected || pageState.currentRole === 'checkpoint') {
+    return {
+      status: 'gated',
+      canContinue: false,
+      suggestedNextAction: 'request_handoff',
+    };
+  }
 
   if (strategy === 'handoff_or_preheat') {
     return {
@@ -86,11 +100,35 @@ function buildGatewayOutcome(outcome) {
   };
 }
 
+function getRouteForState({ url, state, intent = null }) {
+  const resolvedIntent = resolveRouteIntent({
+    intent,
+    pageState: state.pageState,
+    lastIntent: state.lastRouteTrace?.intent ?? null,
+  });
+
+  return decideRoute({
+    url,
+    intent: resolvedIntent,
+    selection: selectEngine({ tool: resolvedIntent, url }),
+    preflight: state.lastRouteTrace?.evidence
+      ? {
+          session_trust: state.lastRouteTrace.evidence.session_trust,
+          recommended_entry_strategy: state.lastRouteTrace.evidence.recommended_entry_strategy,
+        }
+      : {},
+    pageState: state.pageState,
+    handoff: state.handoff,
+  });
+}
+
 export function registerGatewayTools(server, state, deps = {}) {
   const enter = deps.enterWithStrategy ?? enterWithStrategy;
   const getPage = deps.getActivePage ?? getActivePage;
   const syncState = deps.syncPageState ?? syncPageState;
   const observeContent = deps.extractObservedContent ?? extractObservedContent;
+  const auditRoute = deps.auditRouteDecision ?? auditRouteDecision;
+  const readLatestRoute = deps.readLatestRouteDecision ?? readLatestRouteDecision;
 
   server.registerTool(
     'entry',
@@ -98,12 +136,32 @@ export function registerGatewayTools(server, state, deps = {}) {
       description: 'Enter a URL through the gateway using preflight strategy metadata.',
       inputSchema: {
         url: z.string().url().describe('Target URL to enter'),
+        intent: z.enum(['read', 'extract', 'act', 'submit', 'workspace', 'collect']).optional().describe('Task intent used to choose the best route'),
       },
     },
-    async ({ url }) => {
+    async ({ url, intent = 'extract' }) => {
       const outcome = await enter({ url, state, deps: { auditName: 'entry' } });
       const gatewayOutcome = buildGatewayOutcome(outcome);
       const preferCurrentUrl = outcome.preflight?.recommended_entry_strategy === 'handoff_or_preheat';
+      const route = decideRoute({
+        url,
+        intent,
+        selection: selectEngine({ tool: intent, url }),
+        preflight: outcome.preflight,
+        pageState: outcome.pageState ?? state.pageState,
+        handoff: outcome.handoff ?? state.handoff,
+      });
+      const routeTrace = {
+        url,
+        intent,
+        status: gatewayOutcome.status,
+        ...route,
+        failure_type: route.selected_mode === 'handoff' ? 'route_blocked' : 'none',
+        error_code: route.selected_mode === 'handoff' ? ROUTE_BLOCKED : null,
+      };
+
+      state.lastRouteTrace = routeTrace;
+      await auditRoute(routeTrace);
 
       return buildGatewayResponse({
         status: gatewayOutcome.status,
@@ -114,6 +172,8 @@ export function registerGatewayTools(server, state, deps = {}) {
           handoff_state: outcome.handoff?.state ?? state.handoff?.state ?? 'idle',
         },
         evidence: { strategy: outcome.preflight ?? null },
+        route: routeTrace,
+        ...(routeTrace.error_code ? { error_code: routeTrace.error_code } : {}),
       });
     }
   );
@@ -127,6 +187,7 @@ export function registerGatewayTools(server, state, deps = {}) {
     async () => {
       const page = await getPage({ state });
       await syncState(page, state, { force: true });
+      const route = getRouteForState({ url: page.url(), state });
 
       return buildGatewayResponse({
         status: getGatewayStatus(state),
@@ -136,6 +197,7 @@ export function registerGatewayTools(server, state, deps = {}) {
           pageState: state.pageState,
         }, state),
         continuation: getGatewayContinuation(state, 'extract'),
+        route,
       });
     }
   );
@@ -151,6 +213,7 @@ export function registerGatewayTools(server, state, deps = {}) {
     async ({ include_markdown = false } = {}) => {
       const page = await getPage({ state });
       const selection = selectEngine({ tool: 'extract', url: page.url() });
+      const route = getRouteForState({ url: page.url(), state, intent: 'extract' });
       let projectedFastPath = null;
 
       if (selection.engine === 'runtime') {
@@ -200,6 +263,7 @@ export function registerGatewayTools(server, state, deps = {}) {
         }, state),
         result: projectedFastPath ?? result,
         continuation: getGatewayContinuation(state, 'inspect'),
+        route,
       });
     }
   );
@@ -214,6 +278,7 @@ export function registerGatewayTools(server, state, deps = {}) {
       const page = await getPage({ state });
       await syncState(page, state, { force: true });
       const outcome = await assessGatewayContinuation(page, state);
+      const route = getRouteForState({ url: page.url(), state });
 
       return buildGatewayResponse({
         status: outcome.status,
@@ -223,7 +288,53 @@ export function registerGatewayTools(server, state, deps = {}) {
           pageState: state.pageState,
         }, state),
         continuation: outcome.continuation,
+        route,
       });
+    }
+  );
+
+  server.registerTool(
+    'explain_route',
+    {
+      description: 'Explain the latest route decision and why Grasp chose it.',
+      inputSchema: {},
+    },
+    async () => {
+      const route = state.lastRouteTrace ?? await readLatestRoute();
+
+      if (!route) {
+        return textResponse([
+          'Route explanation unavailable.',
+          'No route decision recorded yet.',
+          'Call entry(url, intent) first.',
+        ]);
+      }
+
+      const fallback = route.fallback_chain?.length
+        ? route.fallback_chain.join(' -> ')
+        : 'none';
+      const triggers = route.evidence?.triggers?.length
+        ? route.evidence.triggers.join(', ')
+        : 'none';
+      const alternatives = route.alternatives?.length
+        ? route.alternatives.map((candidate) => `${candidate.mode} (${candidate.reason})`).join('; ')
+        : 'none';
+
+      return textResponse([
+        'Route explanation',
+        `Mode: ${route.selected_mode ?? 'unknown'}`,
+        `Template: ${route.policy_template ?? 'unknown'}`,
+        `Intent: ${route.intent ?? 'unknown'}`,
+        `Status: ${route.status ?? 'unknown'}`,
+        `Confidence: ${route.confidence ?? 'unknown'}`,
+        `Risk: ${route.risk_level ?? 'unknown'}`,
+        `Requires human: ${route.requires_human ? 'yes' : 'no'}`,
+        `Next: ${route.next_step ?? 'unknown'}`,
+        `Fallback: ${fallback}`,
+        `Alternatives: ${alternatives}`,
+        `Failure type: ${route.failure_type ?? 'none'}`,
+        `Evidence: ${triggers}`,
+      ], { route });
     }
   );
 }

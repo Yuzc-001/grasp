@@ -119,7 +119,23 @@ test('applyReviewedControl writes review controls, blocks sensitive controls, an
     },
     setControlValue: async (field, value) => {
       actions.push({ field: field.label, value });
-      return { evidence: { autosave_possible: true, write_side_effect: 'draft_mutation_possible' } };
+      return {
+        evidence: { autosave_possible: true, write_side_effect: 'draft_mutation_possible' },
+        snapshot: {
+          fields: [
+            {
+              label: '期望工作城市',
+              normalized_label: '期望工作城市',
+              risk_level: 'review',
+              type: 'select',
+              hint_id: 'S1',
+              current_state: 'filled',
+              value,
+            },
+            { label: '证件号码', normalized_label: '证件号码', risk_level: 'sensitive', type: 'select', hint_id: 'S2' },
+          ],
+        },
+      };
     },
   };
 
@@ -172,6 +188,19 @@ test('applyReviewedDate writes review date fields and preserves mutation evidenc
         write_side_effect: 'draft_mutation_possible',
         field: field.label,
         value,
+      },
+      snapshot: {
+        fields: [
+          {
+            label: '最早可入职时间',
+            normalized_label: '最早可入职时间',
+            risk_level: 'review',
+            type: 'date',
+            hint_id: 'D1',
+            current_state: 'filled',
+            value,
+          },
+        ],
       },
     }),
   };

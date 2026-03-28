@@ -41,6 +41,9 @@ export async function main(argv = process.argv.slice(2)) {
   } else if (cmd === 'logs') {
     const { runLogs } = await import('./src/cli/cmd-logs.js');
     await runLogs(rest);
+  } else if (cmd === 'explain') {
+    const { runExplain } = await import('./src/cli/cmd-explain.js');
+    await runExplain();
   } else if (cmd === '--version' || cmd === '-v') {
     const { SERVER_INFO } = await import('./src/server/index.js');
     console.log(SERVER_INFO.version);
@@ -51,20 +54,24 @@ export async function main(argv = process.argv.slice(2)) {
 
 export function renderHelpText() {
   return `
-  Grasp — AI browser gateway
+  Grasp — route-aware Agent Web Runtime
+  Connect Chrome once. Let agents choose a route, verify, hand off, and resume real pages.
 
   Usage:
-    grasp                  Start gateway setup and connect Chrome for first use
+    grasp                  Bootstrap the runtime and connect Chrome for first use
     grasp connect          Same as above
-    grasp status           Show Chrome connection and recent activity
+    grasp status           Show runtime state, current page, and recent activity
     grasp logs             Show recent audit log
       --lines N            Number of lines to show (default: 50)
       --follow, -f         Stream new entries in real-time
+    grasp explain          Explain the latest route decision
     grasp --version        Print version
     grasp --help           Print this help
 
-  Quick start:
-    npx grasp              Run gateway setup, get your AI client config
+  First runtime steps:
+    1. npx grasp           Bootstrap the runtime and connect your AI client
+    2. Open any real page  Keep using the dedicated chrome-grasp profile
+    3. Ask your AI         Call get_status / entry(url, intent) / inspect / extract or continue / explain_route
 `;
 }
 

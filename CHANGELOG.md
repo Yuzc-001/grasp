@@ -4,6 +4,27 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.6.0 — 2026-03-28
+
+The release that makes route selection a first-class product boundary instead of just another internal browser decision.
+
+### Added
+- `entry(url, intent)` now returns a structured route decision with `selected_mode`, `confidence`, `evidence`, `fallback_chain`, `requires_human`, `risk_level`, and `next_step`
+- Route policy templates now distinguish `public_content`, `authenticated_content`, `dynamic_workspace`, `real_form`, and `gated_handoff`
+- Route explainability is now first-class through structured route traces, `explain_route`, and `grasp explain`
+
+### Changed
+- Public positioning now centers on `Route by Evidence / 证据选路` and `One URL, one best path`
+- `inspect`, `extract`, and `continue` now return the current route metadata instead of only page/continuation state
+- Route traces are now written to the audit log in a structured form so route choice and fallback boundaries can be inspected later
+- Package metadata, docs entry points, release docs, and examples now describe Grasp as a route-aware Agent Web Runtime instead of only a browser runtime
+
+### Validated
+- Focused route-aware and explainability suite passes: `34 / 34`
+- The verified slice covers route policy selection, route trace persistence, `grasp explain`, `explain_route`, and the route-aware gateway flow
+
+---
+
 ## v0.55.0 — 2026-03-26
 
 The release that closes the last workspace consistency gaps for navigation-first authenticated surfaces.

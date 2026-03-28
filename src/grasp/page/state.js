@@ -21,6 +21,7 @@ function detectCheckpointSignals({ url, title = '', bodyText = '', headings = []
   const titleText = String(title).toLowerCase();
   const headingText = headings.join(' ').toLowerCase();
   const signals = [];
+  const solvedCloudflareChallenge = text.includes('you bypassed the cloudflare challenge');
 
   if (titleText.includes('just a moment') || text.includes('just a moment')) {
     signals.push('title_or_text_just_a_moment');
@@ -28,7 +29,7 @@ function detectCheckpointSignals({ url, title = '', bodyText = '', headings = []
   if (text.includes('checking your browser')) signals.push('checking_your_browser');
   if (text.includes('verify you are human')) signals.push('verify_you_are_human');
   if (text.includes('security check')) signals.push('security_check');
-  if (text.includes('cf-challenge') || text.includes('cloudflare')) signals.push('cloudflare_challenge');
+  if (!solvedCloudflareChallenge && (text.includes('cf-challenge') || text.includes('cloudflare'))) signals.push('cloudflare_challenge');
   if (headingText.includes('just a moment')) signals.push('heading_just_a_moment');
   if (nodes <= 0 && text.length <= 24) signals.push('low_interaction_sparse_page');
 
@@ -177,7 +178,6 @@ function classifyPageRole({ url, title = '', bodyText = '', nodes = 0, forms = 0
   const text = bodyText.toLowerCase();
   const path = getUrlPath(url);
 
-  const loginHints = ['sign in', 'log in', 'login', 'password', 'username', 'email address'];
   const searchHints = ['search results', 'no results', 'filter results'];
   const formHints = ['submit', 'required', 'email', 'message'];
   const headingText = headings.join(' ').toLowerCase();
@@ -192,7 +192,9 @@ function classifyPageRole({ url, title = '', bodyText = '', nodes = 0, forms = 0
     return 'workspace';
   }
 
-  if (loginHints.some((hint) => text.includes(hint)) || /\/login\b|\/signin\b/.test(path)) {
+  const authCopyPresent = ['sign in', 'log in', 'login'].some((hint) => text.includes(hint) || headingText.includes(hint));
+  const credentialPairPresent = text.includes('password') && text.includes('username');
+  if (authCopyPresent || credentialPairPresent || /\/login\b|\/signin\b/.test(path)) {
     return 'auth';
   }
 

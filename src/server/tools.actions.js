@@ -13,6 +13,7 @@ import { extractMainContent } from './content.js';
 import { readBossFastPath } from './fast-path-router.js';
 import { buildPageProjection } from './page-projection.js';
 import { selectEngine } from './engine-selection.js';
+import { readLatestRouteDecision } from './audit.js';
 
 function buildStructuredError(message, normalizedHintId, verdict) {
   const meta = {
@@ -72,6 +73,7 @@ export function registerActionTools(server, state, deps = {}) {
         state.handoff = await readHandoffState();
         const handoff = state.handoff ?? { state: 'idle' };
         const pageState = state.pageState ?? {};
+        const route = state.lastRouteTrace ?? await readLatestRouteDecision();
         const { mode, detail } = describeMode(state);
 
         return textResponse([
@@ -81,7 +83,7 @@ export function registerActionTools(server, state, deps = {}) {
           `URL: ${page.url()}`,
           `Mode: ${mode}`,
           `  ${detail}`,
-          `Hint Map: ${state.hintMap.length} elements cached`,
+          `Hint Map: ${state.hintMap?.length ?? 0} elements cached`,
           `Page role: ${pageState.currentRole ?? 'unknown'}`,
           `Grasp confidence: ${pageState.graspConfidence ?? 'unknown'}`,
           `Reacquired: ${pageState.reacquired ? 'yes' : 'no'}`,
@@ -89,9 +91,11 @@ export function registerActionTools(server, state, deps = {}) {
           ...(pageState.checkpointKind ? [`Checkpoint kind: ${pageState.checkpointKind}`] : []),
           ...(pageState.checkpointSignals?.length ? [`Checkpoint signals: ${pageState.checkpointSignals.join(', ')}`] : []),
           ...(pageState.suggestedNextAction ? [`Suggested next action: ${pageState.suggestedNextAction}`] : []),
+          ...(route?.selected_mode ? [`Last route: ${route.selected_mode}`] : []),
+          ...(route?.next_step ? [`Route next step: ${route.next_step}`] : []),
           `Handoff: ${handoff.state}`,
           ...(handoff.reason ? [`  reason: ${handoff.reason}`] : []),
-        ], { handoff, pageState });
+        ], { handoff, pageState, ...(route ? { route } : {}) });
       } catch (err) {
         return errorResponse(`Grasp is NOT connected.\n${err.message}`);
       }

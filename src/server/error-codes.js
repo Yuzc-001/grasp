@@ -3,3 +3,4 @@ export const TYPE_FAILED = 'TYPE_FAILED';
 export const NO_EFFECT = 'NO_EFFECT';
 export const LOADING_PENDING = 'LOADING_PENDING';
 export const EXECUTION_FAILED = 'EXECUTION_FAILED';
+export const ROUTE_BLOCKED = 'ROUTE_BLOCKED';

@@ -321,7 +321,7 @@ test('collectVisibleWorkspaceSnapshot prefers leaf nav items over grouped contai
     tagName: 'a',
     attrs: {
       class: 'weui-desktop-menu__link weui-desktop-menu__link_current',
-      closestMatches: ['nav, aside, [role="navigation"], [role="menu"], [role="tablist"], header'],
+      closestMatches: ['nav, [role="navigation"], [role="menu"], [role="tablist"]'],
     },
     textContent: '首页',
   });

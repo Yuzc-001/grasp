@@ -54,6 +54,7 @@ export function createServerState() {
     handoff: createHandoffState(),
     runtimeTruth: null,
     verificationContext: null,
+    lastRouteTrace: null,
     taskFrames: new Map(),
   };
 }

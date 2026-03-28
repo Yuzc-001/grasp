@@ -71,6 +71,8 @@ export function normalizeFormField(field) {
     ...field,
     label,
     normalized_label,
+    disabled: field?.disabled === true,
+    readOnly: field?.readOnly === true || field?.readonly === true,
     current_state: deriveCurrentState(field),
     risk_level: field?.risk_level ?? deriveRiskLevel(label, field),
   };
@@ -196,6 +198,8 @@ export async function collectVisibleFormSnapshot(page) {
         id: el.getAttribute('id')?.trim() ?? '',
         name: el.getAttribute('name')?.trim() ?? '',
         required: el.required || el.getAttribute('required') !== null,
+        disabled: el.disabled === true,
+        readOnly: 'readOnly' in el ? el.readOnly === true : false,
         value: 'value' in el ? el.value : null,
         checked: 'checked' in el ? el.checked : null,
         ariaLabelledByText: getAriaLabelledByText(el),

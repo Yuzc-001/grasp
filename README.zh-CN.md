@@ -2,17 +2,17 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.6.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.1-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.zh-CN.md#快速开始)
 > **Grasp 是一个会先选路的 Agent Web Runtime。One URL, one best path.**
 
-Grasp 完全本地运行，使用专属的 `chrome-grasp` 浏览器配置目录，让智能体拥有持久、可恢复的网页运行时，而不是一次性标签页和单站点脚本。`v0.6.0` 的核心承诺很简单：给它一个 URL 和任务意图，它先选出最合适的路径，让这个决定可解释，并沿着同一条 runtime 路径继续执行。
+Grasp 完全本地运行，使用专属的 `chrome-grasp` browser 配置目录，让智能体拥有持久、可恢复的网页运行时，而不是一次性标签页和单站点脚本。`v0.6.1` 的核心承诺很简单：给它一个 URL 和任务意图，它先选出最合适的路径，让这个决定可解释，并沿着同一条 runtime 路径继续执行。
 
-- 当前包版本：`v0.6.0`
+- 当前包版本：`v0.6.1`
 - 先看展示单页：[docs/browser-runtime-landing.html](./docs/browser-runtime-landing.html)
 - 对外文档入口：[docs/README.md](./docs/README.md)
-- 发布说明：[docs/release-notes-v0.6.0.md](./docs/release-notes-v0.6.0.md)
+- 发布说明：[docs/release-notes-v0.6.1.md](./docs/release-notes-v0.6.1.md)
 
 ---
 

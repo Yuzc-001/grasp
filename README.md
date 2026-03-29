@@ -2,17 +2,17 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.6.0-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.1-0B1738?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
 [![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#quickstart)
 > **Grasp is a route-aware Agent Web Runtime. One URL, one best path.**
 
-Grasp runs locally, keeps a dedicated `chrome-grasp` profile, and gives agents a persistent, recoverable web runtime instead of disposable tabs and one-off scripts. The product promise in `v0.6.0` is simple: given a URL and an intent, Grasp should choose the best path first, keep that decision explainable, and continue on the same runtime path.
+Grasp runs locally, keeps a dedicated `chrome-grasp` profile, and gives agents a persistent, recoverable web runtime instead of disposable tabs and one-off scripts. The product promise in `v0.6.1` is simple: given a URL and an intent, Grasp should choose the best path first, keep that decision explainable, and continue on the same runtime path.
 
-- Current package release: `v0.6.0`
+- Current package release: `v0.6.1`
 - Start here: [Browser Runtime Landing](./docs/browser-runtime-landing.html)
 - Public docs for the runtime surface: [docs/README.md](./docs/README.md)
-- Release notes: [docs/release-notes-v0.6.0.md](./docs/release-notes-v0.6.0.md)
+- Release notes: [docs/release-notes-v0.6.1.md](./docs/release-notes-v0.6.1.md)
 
 ---
 

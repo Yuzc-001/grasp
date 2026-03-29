@@ -36,6 +36,7 @@ export function registerActionTools(server, state, deps = {}) {
   const getPage = deps.getActivePage ?? getActivePage;
   const syncState = deps.syncPageState ?? syncPageState;
   const extractContent = deps.extractMainContent ?? extractMainContent;
+  const navigate = deps.navigateTo ?? navigateTo;
 
   server.registerTool(
     'navigate',
@@ -45,9 +46,9 @@ export function registerActionTools(server, state, deps = {}) {
     },
     async ({ url }) => {
       try {
-        const page = await navigateTo(url, { state });
-        await syncPageState(page, state, { force: true });
-        await audit('navigate', url);
+        const page = await navigate(url, { state });
+        await syncState(page, state, { force: true });
+        await audit('navigate', url, null, state);
         return textResponse([
           `Navigated to: ${url}`,
           `Page title: ${await page.title()}`,
@@ -204,11 +205,11 @@ export function registerActionTools(server, state, deps = {}) {
           newDomRevision: state.pageState?.domRevision ?? 0,
         }),
         onFailure: async (failure) => {
-          await audit('click_failed', `[${normalizedHintId}] ${failure.error_code}`);
+          await audit('click_failed', `[${normalizedHintId}] ${failure.error_code}`, null, state);
           return buildStructuredError(`Click verification failed for [${normalizedHintId}]`, normalizedHintId, failure);
         },
         onSuccess: async ({ executionResult, evidence }) => {
-          await audit('click', `[${normalizedHintId}] "${executionResult.label}"`);
+          await audit('click', `[${normalizedHintId}] "${executionResult.label}"`, null, state);
           const urlAfter = page.url();
           const nav = urlAfter !== prevUrl ? `\nNavigated to: ${urlAfter}` : '';
           return textResponse(
@@ -260,11 +261,11 @@ export function registerActionTools(server, state, deps = {}) {
           });
         },
         onFailure: async (failure) => {
-          await audit('type_failed', `[${normalizedHintId}] ${failure.error_code}`);
+          await audit('type_failed', `[${normalizedHintId}] ${failure.error_code}`, null, state);
           return buildStructuredError(`Type verification failed for [${normalizedHintId}]`, normalizedHintId, failure);
         },
         onSuccess: async ({ executionResult, evidence }) => {
-          await audit('type', `[${normalizedHintId}] "${executionResult.text.slice(0, 20)}${executionResult.text.length > 20 ? '...' : ''}"`);
+          await audit('type', `[${normalizedHintId}] "${executionResult.text.slice(0, 20)}${executionResult.text.length > 20 ? '...' : ''}"`, null, state);
           return textResponse(
             `Typed "${executionResult.text}" into [${normalizedHintId}]${executionResult.press_enter ? ' and pressed Enter' : ''}.`,
             { evidence }
@@ -292,7 +293,7 @@ export function registerActionTools(server, state, deps = {}) {
       try {
         const result = await hoverByHintId(page, normalizedHintId, { rebuildHints });
         await syncPageState(page, state, { force: true });
-        await audit('hover', `[${normalizedHintId}] "${result.label}"`);
+        await audit('hover', `[${normalizedHintId}] "${result.label}"`, null, state);
         const urlAfter = page.url();
         const nav = urlAfter !== prevUrl ? `\nNavigated to: ${urlAfter}` : '';
         return textResponse(
@@ -300,7 +301,7 @@ export function registerActionTools(server, state, deps = {}) {
           { hint_id: normalizedHintId }
         );
       } catch (err) {
-        await audit('hover_failed', `[${normalizedHintId}] ${err.message}`);
+        await audit('hover_failed', `[${normalizedHintId}] ${err.message}`, null, state);
         await syncPageState(page, state, { force: true });
         return buildStructuredError(`hover failed: ${err.message}`, normalizedHintId, {
           error_code: TYPE_FAILED,
@@ -328,7 +329,7 @@ export function registerActionTools(server, state, deps = {}) {
       await syncPageState(page, state);
       await pressKey(page, key);
       await syncPageState(page, state, { force: true });
-      await audit('press_key', key);
+      await audit('press_key', key, null, state);
       return textResponse(`Pressed key: ${key}`, {
         key,
         page_role: state.pageState?.currentRole ?? 'unknown',
@@ -350,7 +351,7 @@ export function registerActionTools(server, state, deps = {}) {
     async ({ selector, condition = 'appears', timeout_ms = 30000 }) => {
       const page = await getPage({ state });
       const result = await watchElement(page, selector, condition, timeout_ms);
-      await audit('watch_element', `${condition} ${selector}`);
+      await audit('watch_element', `${condition} ${selector}`, null, state);
       return textResponse([
         `Watch selector: ${selector}`,
         `Condition: ${condition}`,
@@ -374,7 +375,7 @@ export function registerActionTools(server, state, deps = {}) {
       await syncPageState(page, state);
       await scroll(page, direction, amount);
       await syncPageState(page, state, { force: true });
-      await audit('scroll', `${direction} ${amount}`);
+      await audit('scroll', `${direction} ${amount}`, null, state);
       return textResponse(
         `Scrolled ${direction} by ${amount}px.`,
         {

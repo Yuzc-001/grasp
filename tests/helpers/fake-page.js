@@ -27,7 +27,23 @@ export function createFakePage(overrides = {}) {
   const defaults = {
     url: buildAccessor(url, 'about:blank'),
     goto: createLoggedMethod('page', 'goto'),
-    evaluate: async (fn, ...args) => fn(...args),
+    evaluate: async (fn, ...args) => {
+      const originalDocument = global.document;
+      const originalWindow = global.window;
+      try {
+        global.window = {
+          document: {
+            visibilityState: 'visible',
+            querySelectorAll: () => [],
+          }
+        };
+        global.document = global.window.document;
+        return fn(...args);
+      } finally {
+        global.document = originalDocument;
+        global.window = originalWindow;
+      }
+    },
     screenshot: async () => Buffer.from(''),
     close: async () => undefined,
     waitForSelector: async () => null,

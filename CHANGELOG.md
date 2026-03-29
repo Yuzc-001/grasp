@@ -4,6 +4,27 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.6.1 — 2026-03-29
+
+The release that solidifies the "Parallelism Foundations" by integrating task-aware auditing and explicit task management into the core runtime.
+
+### Added
+- **Task Management Tools**: Introduced `list_tasks` and `switch_task` to the MCP surface, allowing agents to explicitly manage and switch between multiple concurrent task contexts.
+- **Integrated Isolation Testing**: Added `tests/server/integrated-task-isolation.test.js` to verify that history and state remain strictly isolated between different task IDs.
+
+### Changed
+- **Task-Aware Auditing**: Overhauled the `audit` mechanism to be task-aware. Action history is now synchronously pushed to the active task frame, ensuring that each task maintains its own verifiable audit trail.
+- **Dependency-Injected Actions**: Refactored `registerActionTools` to support dependency injection for `navigateTo` and `syncPageState`, significantly improving the testability and robustness of the action pipeline.
+- **Foundation Verification**: Completed and verified the "Parallelism Foundations" as promised in the v0.6 vision, moving them from protected baseline behavior to active, tested features.
+- **Improved Test Fakes**: Enhanced `tests/helpers/fake-page.js` with better `window` and `document` mocks to support complex runtime evaluations in isolated test environments.
+
+### Validated
+- New integrated isolation suite passes: `2 / 2` (Verifying physical history isolation between concurrent tasks).
+- Task frame and surface foundations pass: `6 / 6`.
+- Full regression pass of the server runtime and action tools ensures zero regressions in existing authenticated and workspace flows.
+
+---
+
 ## v0.6.0 — 2026-03-28
 
 The release that makes route selection a first-class product boundary instead of just another internal browser decision.

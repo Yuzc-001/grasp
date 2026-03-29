@@ -1,6 +1,6 @@
 {
   "name": "grasp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Route-aware Agent Web Runtime with persistent sessions, verified actions, and recoverable handoff.",
   "main": "index.js",
   "bin": {

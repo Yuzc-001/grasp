@@ -40,25 +40,49 @@ function parseAuditLine(line) {
  * Append one audit entry. Fire-and-forget — failures are silently ignored.
  * @param {string} action  e.g. 'click', 'navigate', 'type'
  * @param {string} detail  e.g. '[B1] "发送"'
+ * @param {object|null} meta Optional metadata
+ * @param {object|null} state Optional server state for task-awareness
  */
-export async function audit(action, detail, meta = null) {
+export async function audit(action, detail, meta = null, state = null) {
+  const taskId = state?.activeTaskId ?? null;
+  
+  if (state && taskId) {
+    const frame = state.taskFrames?.get(taskId);
+    if (frame) {
+      frame.history = frame.history || [];
+      frame.history.push({
+        timestamp: new Date().toISOString(),
+        action,
+        detail,
+        meta
+      });
+      if (frame.history.length > 0) {
+        // Cap history to prevent memory bloat
+        if (frame.history.length > 100) {
+          frame.history.shift();
+        }
+      }
+    }
+  }
+
   try {
+    const taskMarker = taskId ? ` <${taskId}>` : '';
     const logPath = getAuditLogPath();
     await mkdir(dirname(logPath), { recursive: true });
     const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const suffix = meta ? ` :: ${JSON.stringify(meta)}` : '';
-    const line = `[${ts}] ${action.padEnd(14)} ${detail}${suffix}\n`;
+    const line = `[${ts}] ${action.padEnd(14)}${taskMarker} ${detail}${suffix}\n`;
     await appendFile(logPath, line, 'utf8');
   } catch {
     // Logging failures must never affect the main tool flow.
   }
 }
 
-export async function auditRouteDecision(trace) {
+export async function auditRouteDecision(trace, state = null) {
   const intent = trace?.intent ?? 'unknown';
   const mode = trace?.selected_mode ?? 'unknown';
   const url = trace?.url ?? 'unknown';
-  await audit('route_decision', `${intent} -> ${mode} @ ${url}`, trace);
+  await audit('route_decision', `${intent} -> ${mode} @ ${url}`, trace, state);
 }
 
 /**

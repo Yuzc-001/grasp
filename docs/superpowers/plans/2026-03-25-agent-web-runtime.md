@@ -14,10 +14,11 @@
 
 The approved spec includes `basic parallel task foundations`. That capability is already present in the current codebase through task frames, task metadata, and the runtime task surface. This plan does not add a new scheduler or new parallel APIs. Instead, it treats those foundations as protected baseline behavior and keeps them covered in the final regression pass through:
 
-- `tests/server/task-frame-runtime.test.js`
-- `tests/server/tools.task-surface.test.js`
-- `tests/server/workspace-runtime.test.js`
-- `tests/server/workspace-tasks.test.js`
+- [x] `tests/server/task-frame-runtime.test.js`
+- [x] `tests/server/tools.task-surface.test.js`
+- [x] `tests/server/integrated-task-isolation.test.js`
+- [x] `tests/server/workspace-runtime.test.js`
+- [x] `tests/server/workspace-tasks.test.js`
 
 ## File Structure
 
@@ -37,10 +38,14 @@ The approved spec includes `basic parallel task foundations`. That capability is
 - Modify: `src/server/fast-path-router.js`
 - Modify: `src/server/tools.gateway.js`
 - Modify: `src/server/tools.actions.js`
+- Create: `src/server/tools.task-surface.js`
 - Create: `tests/server/page-projection.test.js`
 - Create: `tests/server/engine-selection.test.js`
 - Modify: `tests/server/tools.gateway.test.js`
 - Modify: `tests/server/tools.actions.test.js`
+- Create: `tests/server/task-frame-runtime.test.js`
+- Create: `tests/server/tools.task-surface.test.js`
+- Create: `tests/server/handoff-task-metadata.test.js`
 
 ### Generic entry orchestration
 

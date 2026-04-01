@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createFakePage } from '../helpers/fake-page.js';
 import { findScrollableAncestor, scroll } from '../../src/layer3-action/actions.js';
 
-function runWithBrowserGlobals(run, { querySelector, getComputedStyle } = {}) {
+function runWithBrowserGlobals(run, { querySelector, querySelectorAll, getComputedStyle } = {}) {
   const originalDocument = global.document;
   const originalWindow = global.window;
   const originalCss = global.CSS;
@@ -13,6 +13,7 @@ function runWithBrowserGlobals(run, { querySelector, getComputedStyle } = {}) {
   global.document = {
     documentElement: {},
     querySelector,
+    querySelectorAll: querySelectorAll ?? (() => []),
   };
   global.window = {
     document: global.document,
@@ -75,6 +76,51 @@ test('findScrollableAncestor returns the nearest scrollable container selector',
 
   const selector = await findScrollableAncestor(page, '[data-grasp-id="B3"]');
   assert.equal(selector, '#scroll-container');
+});
+
+test('findScrollableAncestor ignores non-unique class-based selectors', async () => {
+  const root = {};
+  const container = {
+    tagName: 'DIV',
+    contentEditable: 'false',
+    scrollHeight: 900,
+    clientHeight: 200,
+    scrollWidth: 300,
+    clientWidth: 300,
+    classList: ['duplicate'],
+    getAttribute: () => null,
+    parentElement: root,
+  };
+  const sibling = { tagName: 'DIV' };
+  const target = {
+    tagName: 'BUTTON',
+    contentEditable: 'false',
+    scrollHeight: 20,
+    clientHeight: 20,
+    scrollWidth: 20,
+    clientWidth: 20,
+    classList: [],
+    getAttribute: (name) => (name === 'data-grasp-id' ? 'B9' : null),
+    parentElement: container,
+  };
+  const page = createFakePage({
+    evaluate: async (fn, ...args) => runWithBrowserGlobals(
+      () => fn(...args),
+      {
+        querySelector: (selector) => (selector === '[data-grasp-id="B9"]' ? target : null),
+        querySelectorAll: (selector) => (selector === 'div.duplicate' ? [container, sibling] : []),
+        getComputedStyle: (element) => {
+          if (element === container) {
+            return { overflowY: 'auto', overflowX: 'hidden' };
+          }
+          return { overflowY: 'visible', overflowX: 'visible' };
+        },
+      }
+    ),
+  });
+
+  const selector = await findScrollableAncestor(page, '[data-grasp-id="B9"]');
+  assert.equal(selector, null);
 });
 
 test('scroll supports horizontal wheel scrolling on the page', async () => {

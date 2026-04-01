@@ -1,6 +1,8 @@
 // Layer 3 - Action Layer
-// All browser operations use real CDP mouse/keyboard events (not JS events)
-// to bypass anti-bot detection.
+// Pointer and keyboard interactions use real CDP mouse/keyboard events to
+// minimize anti-bot fingerprints. Targeted nested-container scrolling is the
+// one deliberate exception: it may use DOM scrollBy for precision when wheel
+// routing to a specific overflow container is unreliable.
 
 /**
  * Find the nearest scrollable ancestor of an element via browser-side evaluation.
@@ -28,7 +30,13 @@ export async function findScrollableAncestor(page, selector) {
         const graspId = current.getAttribute('data-grasp-id');
         if (graspId) return `[data-grasp-id="${graspId}"]`;
         const classes = [...current.classList].map((cls) => `.${CSS.escape(cls)}`).join('');
-        return `${current.tagName.toLowerCase()}${classes}`;
+        if (classes) {
+          const candidateSelector = `${current.tagName.toLowerCase()}${classes}`;
+          const matches = document.querySelectorAll(candidateSelector);
+          if (matches.length === 1 && matches[0] === current) {
+            return candidateSelector;
+          }
+        }
       }
 
       current = current.parentElement;
@@ -72,7 +80,9 @@ async function warmupMouseIfNeeded(page) {
 }
 
 /**
- * Scroll the page or container by a given amount using real CDP wheel events.
+ * Scroll the page or container by a given amount.
+ * Page scrolling uses real CDP wheel events; targeted container scrolling uses
+ * DOM scrollBy to avoid sending wheel input to the wrong overflow region.
  * @param {import('playwright').Page} page
  * @param {'up'|'down'|'left'|'right'} direction
  * @param {number} [amount=600]

@@ -5,9 +5,9 @@
 import { getActivePage, navigateTo, getTabs, switchTab, newTab, closeTab } from '../../src/layer1-bridge/chrome.js';
 import { clickByHintId, typeByHintId } from '../../src/layer3-action/actions.js';
 import { syncPageState } from '../../src/server/state.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const E2E_DIR = path.dirname(fileURLToPath(import.meta.url));
 const TEST_PAGE = new URL('./test-all-tools.html', import.meta.url).href;

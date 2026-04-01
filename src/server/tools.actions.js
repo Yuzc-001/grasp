@@ -75,12 +75,11 @@ export function registerActionTools(server, state, deps = {}) {
   const readFastPathContent = deps.readFastPath ?? readFastPath;
 
   state.pendingDialog = state.pendingDialog ?? null;
-  state._dialogPageId = state._dialogPageId ?? null;
+  state._dialogListenerPages = state._dialogListenerPages ?? new WeakSet();
   async function ensureDialogListener(page) {
     if (!page || typeof page.on !== 'function') return;
-    const pageId = page._guid ?? page.url?.() ?? null;
-    if (state._dialogPageId === pageId) return;
-    state._dialogPageId = pageId;
+    if (state._dialogListenerPages.has(page)) return;
+    state._dialogListenerPages.add(page);
     page.on('dialog', (dialog) => {
       state.pendingDialog = {
         type: dialog.type(),
@@ -92,12 +91,11 @@ export function registerActionTools(server, state, deps = {}) {
   }
 
   if (!state.consoleLogs) state.consoleLogs = [];
-  state._consolePageId = state._consolePageId ?? null;
+  state._consoleListenerPages = state._consoleListenerPages ?? new WeakSet();
   function ensureConsoleListener(page) {
     if (!page || typeof page.on !== 'function') return;
-    const pageId = page._guid ?? page.url?.() ?? null;
-    if (state._consolePageId === pageId) return;
-    state._consolePageId = pageId;
+    if (state._consoleListenerPages.has(page)) return;
+    state._consoleListenerPages.add(page);
     page.on('console', (msg) => {
       state.consoleLogs.push({
         level: msg.type(),
@@ -603,8 +601,13 @@ export function registerActionTools(server, state, deps = {}) {
           scrollTop: Math.round(target.scrollTop),
           scrollHeight: Math.round(target.scrollHeight),
           clientHeight: Math.round(target.clientHeight),
+          scrollLeft: Math.round(target.scrollLeft),
+          scrollWidth: Math.round(target.scrollWidth),
+          clientWidth: Math.round(target.clientWidth),
           atTop: target.scrollTop <= 0,
           atBottom: target.scrollTop + target.clientHeight >= target.scrollHeight - 1,
+          atLeft: target.scrollLeft <= 0,
+          atRight: target.scrollLeft + target.clientWidth >= target.scrollWidth - 1,
         };
       }, scrollTarget);
 
@@ -612,7 +615,9 @@ export function registerActionTools(server, state, deps = {}) {
       await audit('scroll', `${direction} ${amount} target=${targetLabel}`, null, state);
 
       const posInfo = scrollInfo
-        ? ` Position: ${scrollInfo.scrollTop}/${scrollInfo.scrollHeight}px.${scrollInfo.atTop ? ' [AT TOP]' : ''}${scrollInfo.atBottom ? ' [AT BOTTOM]' : ''}`
+        ? (direction === 'left' || direction === 'right'
+          ? ` Position: ${scrollInfo.scrollLeft}/${scrollInfo.scrollWidth}px.${scrollInfo.atLeft ? ' [AT LEFT]' : ''}${scrollInfo.atRight ? ' [AT RIGHT]' : ''}`
+          : ` Position: ${scrollInfo.scrollTop}/${scrollInfo.scrollHeight}px.${scrollInfo.atTop ? ' [AT TOP]' : ''}${scrollInfo.atBottom ? ' [AT BOTTOM]' : ''}`)
         : '';
       return textResponse(
         `Scrolled ${targetLabel} ${direction} by ${amount}px.${posInfo}`,
@@ -1216,12 +1221,12 @@ export function registerActionTools(server, state, deps = {}) {
 
       try {
         if (text) {
-          await page.locator(`text=${text}`).first().waitFor({ state: 'visible', timeout });
+          await page.getByText(text).first().waitFor({ state: 'visible', timeout });
           await audit('wait_for', `text "${text}" appeared`, null, state);
           return textResponse(`Text "${text}" appeared on the page.`);
         }
         if (text_gone) {
-          await page.locator(`text=${text_gone}`).first().waitFor({ state: 'hidden', timeout });
+          await page.getByText(text_gone).first().waitFor({ state: 'hidden', timeout });
           await audit('wait_for', `text "${text_gone}" gone`, null, state);
           return textResponse(`Text "${text_gone}" is no longer visible.`);
         }

@@ -261,6 +261,92 @@ test('scroll targets the nearest scrollable container and reports position metad
   assert.equal(result.meta.dom_revision, 8);
 });
 
+test('scroll reports horizontal metadata for left/right page scrolling', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = {
+    hintMap: [],
+    pageState: { currentRole: 'content', graspConfidence: 'high', domRevision: 10 },
+    handoff: { state: 'idle' },
+    runtimeConfirmation: {
+      instance_key: 'windowed|Chrome/136.0.7103.114|1.3',
+      display: 'windowed',
+      browser: 'Chrome/136.0.7103.114',
+      protocolVersion: '1.3',
+      confirmed_at: 0,
+    },
+  };
+  const documentElement = {
+    scrollTop: 0,
+    scrollHeight: 900,
+    clientHeight: 900,
+    scrollLeft: 0,
+    scrollWidth: 300,
+    clientWidth: 180,
+  };
+  const page = createFakePage({
+    mouse: {
+      wheel: async (dx, dy) => {
+        documentElement.scrollLeft += dx;
+        documentElement.scrollTop += dy;
+      },
+    },
+    evaluate: async (fn, ...args) => {
+      const originalDocument = global.document;
+      const originalWindow = global.window;
+      const originalCss = global.CSS;
+      const originalRequestAnimationFrame = global.requestAnimationFrame;
+
+      global.document = {
+        documentElement,
+        querySelector: () => null,
+      };
+      global.window = {
+        document: global.document,
+        getComputedStyle: () => ({ overflowY: 'visible', overflowX: 'visible' }),
+      };
+      global.CSS = { escape: (value) => String(value) };
+      global.requestAnimationFrame = (callback) => callback();
+
+      try {
+        return await fn(...args);
+      } finally {
+        global.document = originalDocument;
+        global.window = originalWindow;
+        global.CSS = originalCss;
+        global.requestAnimationFrame = originalRequestAnimationFrame;
+      }
+    },
+  });
+
+  registerActionTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = {
+        currentRole: 'content',
+        graspConfidence: 'high',
+        domRevision: 11,
+      };
+      return currentState;
+    },
+    getBrowserInstance: async () => ({
+      browser: 'Chrome/136.0.7103.114',
+      protocolVersion: '1.3',
+      headless: false,
+      display: 'windowed',
+      warning: null,
+    }),
+  });
+
+  const tool = calls.find((entry) => entry.name === 'scroll');
+  const result = await tool.handler({ direction: 'right', amount: 120 });
+
+  assert.equal(result.meta.scrollLeft, 120);
+  assert.equal(result.meta.atLeft, false);
+  assert.equal(result.meta.atRight, true);
+  assert.match(result.content[0].text, /Position: 120\/300px\.\s*\[AT RIGHT\]/);
+});
+
 test('screenshot returns base64 image content when page capture yields a Buffer', async () => {
   const calls = [];
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
@@ -578,4 +664,71 @@ test('get_console_logs filters entries and clears the buffer when requested', as
   assert.equal(result.meta.count, 1);
   assert.equal(result.meta.total, 2);
   assert.deepEqual(state.consoleLogs, []);
+});
+
+test('get_console_logs does not re-attach listeners when the same page URL changes', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  let currentUrl = 'https://example.com/one';
+  const attachedEvents = [];
+  const page = createFakePage({
+    url: () => currentUrl,
+    on: (event) => {
+      attachedEvents.push(event);
+    },
+  });
+  const state = {
+    hintMap: [],
+    pageState: { currentRole: 'content', graspConfidence: 'high' },
+    handoff: { state: 'idle' },
+    consoleLogs: [],
+  };
+
+  registerActionTools(server, state, {
+    getActivePage: async () => page,
+  });
+
+  const tool = calls.find((entry) => entry.name === 'get_console_logs');
+  await tool.handler({});
+  currentUrl = 'https://example.com/two';
+  await tool.handler({});
+
+  assert.deepEqual(attachedEvents, ['dialog', 'console']);
+});
+
+test('wait_for uses getByText so quoted text is matched literally', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const requestedTexts = [];
+  const page = createFakePage({
+    getByText: (value) => {
+      requestedTexts.push(value);
+      return {
+        first: () => ({
+          waitFor: async ({ state, timeout }) => {
+            assert.equal(state, 'visible');
+            assert.equal(timeout, 1500);
+          },
+        }),
+      };
+    },
+    locator: () => {
+      throw new Error('locator text selector should not be used for wait_for text matching');
+    },
+  });
+  const state = {
+    hintMap: [],
+    pageState: { currentRole: 'content', graspConfidence: 'high' },
+    handoff: { state: 'idle' },
+  };
+
+  registerActionTools(server, state, {
+    getActivePage: async () => page,
+  });
+
+  const tool = calls.find((entry) => entry.name === 'wait_for');
+  const result = await tool.handler({ text: 'He said "hi"', timeout: 1500 });
+
+  assert.deepEqual(requestedTexts, ['He said "hi"']);
+  assert.match(result.content[0].text, /Text "He said "hi"" appeared on the page\./);
 });

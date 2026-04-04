@@ -1,59 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Grasp — Route-Aware AI Browser Runtime</title>
-  <meta name="description" content="Grasp is the route-aware AI Browser Runtime. One URL, one best path.">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grasp — Browser Runtime Ready</title>
+  <meta name="description" content="Grasp runs a dedicated browser for your agent. Route-aware, verified, recoverable web work." />
   <style>
     :root {
-      --bg: #0d1117;
-      --bg-soft: #131922;
-      --panel: rgba(17, 24, 34, 0.78);
-      --panel-strong: rgba(11, 17, 25, 0.92);
-      --line: rgba(232, 219, 192, 0.12);
-      --text: #f5eddc;
-      --muted: #b6ae9d;
-      --accent: #d7ff64;
-      --accent-2: #7ae7c7;
-      --accent-3: #ffb36b;
-      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      --bg: #0a0d10;
+      --panel: #11161b;
+      --panel-2: #151c22;
+      --panel-3: #0f1318;
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(183, 255, 94, 0.28);
+      --text: #f3f5f7;
+      --muted: #9aa4af;
+      --soft: #c8d0d8;
+      --accent: #b7ff5e;
+      --accent-soft: rgba(183, 255, 94, 0.12);
+      --warn: #ffcf70;
+      --shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+      --radius: 24px;
       --max: 1180px;
-      --radius: 26px;
     }
 
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
 
     body {
       margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(183, 255, 94, 0.08), transparent 22%),
+        radial-gradient(circle at bottom left, rgba(95, 124, 255, 0.07), transparent 26%),
+        linear-gradient(180deg, #090c0f 0%, #0a0d10 100%);
       color: var(--text);
-      background:
-        radial-gradient(circle at top left, rgba(122, 231, 199, 0.18), transparent 28%),
-        radial-gradient(circle at 85% 20%, rgba(215, 255, 100, 0.16), transparent 24%),
-        radial-gradient(circle at 50% 120%, rgba(255, 179, 107, 0.12), transparent 28%),
-        linear-gradient(180deg, #0b0f15 0%, #0d1117 100%);
-      font-family: "Segoe UI Variable Text", "Trebuchet MS", sans-serif;
+      font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
       line-height: 1.55;
-      overflow-x: hidden;
-    }
-
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background:
-        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-      background-size: 44px 44px;
-      mask-image: radial-gradient(circle at center, black, transparent 82%);
-      opacity: 0.35;
     }
 
     a {
@@ -66,44 +48,20 @@
       margin: 0 auto;
     }
 
-    .eyebrow,
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 9px 14px;
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      background: rgba(255, 255, 255, 0.02);
-      backdrop-filter: blur(10px);
-    }
-
-    .pill::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 0 16px rgba(215, 255, 100, 0.5);
-    }
-
     header {
-      padding: 28px 0 18px;
       position: sticky;
       top: 0;
-      z-index: 5;
+      z-index: 10;
       backdrop-filter: blur(14px);
-      background: linear-gradient(180deg, rgba(11, 15, 21, 0.82), rgba(11, 15, 21, 0.2));
+      background: rgba(10, 13, 16, 0.72);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     }
 
     nav {
+      min-height: 72px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       gap: 18px;
       flex-wrap: wrap;
     }
@@ -113,343 +71,409 @@
       align-items: center;
       gap: 12px;
       font-size: 14px;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      letter-spacing: 0.18em;
-      color: var(--muted);
+      color: var(--soft);
     }
 
     .brand-mark {
-      width: 14px;
-      height: 14px;
-      border-radius: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
       transform: rotate(45deg);
-      background: linear-gradient(135deg, var(--accent), var(--accent-3));
-      box-shadow: 0 0 20px rgba(215, 255, 100, 0.45);
+      background: var(--accent);
+      box-shadow: 0 0 20px rgba(183, 255, 94, 0.28);
     }
 
     .nav-links {
       display: flex;
+      align-items: center;
       gap: 10px;
       flex-wrap: wrap;
     }
 
-    .nav-links a,
-    .cta-row a {
-      border: 1px solid var(--line);
-      border-radius: 999px;
+    .nav-links a {
       padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
       color: var(--muted);
       transition: 160ms ease;
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    .nav-links a:hover,
-    .cta-row a:hover {
+    .nav-links a:hover {
       color: var(--text);
-      border-color: rgba(215, 255, 100, 0.35);
-      background: rgba(215, 255, 100, 0.06);
-      transform: translateY(-1px);
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.04);
     }
 
     main {
-      padding: 48px 0 90px;
+      padding: 42px 0 84px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 16px rgba(183, 255, 94, 0.28);
     }
 
     .hero {
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-      gap: 28px;
+      grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+      gap: 22px;
       align-items: stretch;
-      margin-bottom: 42px;
     }
 
     .panel {
-      background: var(--panel);
+      background: linear-gradient(180deg, rgba(18, 23, 28, 0.96), rgba(13, 17, 21, 0.98));
       border: 1px solid var(--line);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      position: relative;
       overflow: hidden;
     }
 
-    .panel::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(255,255,255,0.04), transparent 35%, transparent 60%, rgba(255,255,255,0.03));
-      pointer-events: none;
-    }
-
     .hero-copy {
-      padding: 34px;
+      padding: 30px;
     }
 
     h1,
     h2,
     h3 {
       margin: 0;
-      font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
-      font-weight: 600;
+      font-weight: 620;
       letter-spacing: -0.03em;
     }
 
     h1 {
-      font-size: clamp(46px, 7vw, 90px);
-      line-height: 0.95;
       margin-top: 22px;
+      font-size: clamp(40px, 6vw, 76px);
+      line-height: 0.95;
       max-width: 10ch;
     }
 
-    .hero-copy p {
-      max-width: 56ch;
+    .lead {
+      margin-top: 18px;
+      max-width: 58ch;
+      color: var(--soft);
+      font-size: 18px;
+    }
+
+    .sublead {
+      margin-top: 14px;
+      max-width: 58ch;
       color: var(--muted);
-      font-size: 17px;
-      margin: 22px 0 0;
+      font-size: 15px;
     }
 
-    .hero-stats {
+    .hero-actions {
       display: flex;
-      gap: 12px;
       flex-wrap: wrap;
-      margin-top: 28px;
+      gap: 12px;
+      margin-top: 26px;
     }
 
-    .hero-stats .pill {
-      letter-spacing: 0.08em;
-      text-transform: none;
-      font-size: 13px;
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.02);
+      transition: 160ms ease;
+    }
+
+    .btn:hover {
       color: var(--text);
+      border-color: var(--line-strong);
+      background: rgba(255, 255, 255, 0.05);
     }
 
-    .cta-row {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 30px;
-    }
-
-    .cta-row a.primary {
-      color: #10150d;
-      background: linear-gradient(135deg, var(--accent), #edf7bc);
-      border-color: transparent;
+    .btn.primary {
+      color: #10140b;
       font-weight: 700;
+      border-color: transparent;
+      background: var(--accent);
     }
 
-    .proof-card {
-      padding: 30px;
+    .btn.primary:hover {
+      background: #c6ff81;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--soft);
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 13px;
+    }
+
+    .meta-chip strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .status-card {
       display: flex;
       flex-direction: column;
+      gap: 18px;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(15, 20, 25, 0.98), rgba(11, 15, 19, 1));
+    }
+
+    .status-head {
+      display: flex;
       justify-content: space-between;
-      min-height: 100%;
-      background:
-        linear-gradient(180deg, rgba(20, 28, 38, 0.88), rgba(12, 17, 25, 0.95));
+      align-items: center;
+      gap: 14px;
     }
 
-    .proof-label {
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
+    .status-head h2 {
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(183, 255, 94, 0.2);
+      background: var(--accent-soft);
+      color: #dff7b8;
       font-size: 12px;
-    }
-
-    .code-loop {
-      margin-top: 18px;
-      padding: 22px;
-      border-radius: 22px;
-      border: 1px solid rgba(215, 255, 100, 0.16);
-      background: rgba(8, 12, 18, 0.82);
-      font-family: "Consolas", "SFMono-Regular", monospace;
-      line-height: 1.9;
-      font-size: 14px;
-      color: #eef4dd;
-      position: relative;
-    }
-
-    .code-loop span {
-      display: block;
-      color: var(--accent);
-    }
-
-    .proof-note {
-      margin-top: 18px;
-      color: var(--muted);
-    }
-
-    .proof-result {
-      margin-top: 18px;
-      padding: 16px 18px;
-      border-radius: 18px;
-      border: 1px solid rgba(122, 231, 199, 0.18);
-      background: rgba(122, 231, 199, 0.05);
-    }
-
-    .proof-result strong {
-      display: block;
-      margin-bottom: 8px;
-      color: var(--text);
-      font-size: 13px;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
     }
 
-    .proof-result ul {
-      margin: 0;
-      padding-left: 18px;
+    .status-pill::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .runtime-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .runtime-stat {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .runtime-stat span {
+      display: block;
       color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .runtime-stat strong {
+      display: block;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 640;
+    }
+
+    .runtime-note,
+    .support-note {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .support-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .support-item {
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--soft);
+      font-size: 14px;
     }
 
     section {
-      margin-top: 18px;
-      padding: 26px 0;
+      padding: 44px 0 0;
     }
 
     .section-head {
       display: flex;
       justify-content: space-between;
       gap: 18px;
-      align-items: end;
-      margin-bottom: 22px;
+      align-items: flex-end;
       flex-wrap: wrap;
-    }
-
-    .section-head p {
-      max-width: 58ch;
-      margin: 0;
-      color: var(--muted);
-    }
-
-    h2 {
-      font-size: clamp(30px, 4vw, 48px);
-      max-width: 12ch;
-    }
-
-    .card-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
-    }
-
-    .card {
-      padding: 24px;
-      border-radius: 24px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      min-height: 240px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card::before {
-      content: "";
-      position: absolute;
-      inset: auto 18px 18px auto;
-      width: 84px;
-      height: 84px;
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(215, 255, 100, 0.18), transparent 70%);
-      pointer-events: none;
-    }
-
-    .card h3 {
-      font-size: 24px;
-      margin-bottom: 12px;
-    }
-
-    .card p,
-    .card li,
-    .compare-copy,
-    .step p {
-      color: var(--muted);
-    }
-
-    .compare-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
-    }
-
-    .compare {
-      padding: 24px;
-      border-radius: 24px;
-      border: 1px solid var(--line);
-      background: var(--panel-strong);
-      box-shadow: var(--shadow);
-    }
-
-    .compare .eyebrow {
       margin-bottom: 18px;
     }
 
-    .compare ul {
-      padding-left: 18px;
-      margin: 18px 0 0;
+    .section-head p {
+      margin: 0;
+      max-width: 58ch;
+      color: var(--muted);
     }
 
-    .steps {
+    h2.section-title {
+      font-size: clamp(28px, 4vw, 44px);
+      max-width: 11ch;
+    }
+
+    .grid-3,
+    .grid-4,
+    .steps,
+    .support-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
+      gap: 16px;
+    }
+
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .support-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .card,
+    .step,
+    .support-card,
+    .proof-panel,
+    .footer-panel {
+      background: linear-gradient(180deg, rgba(18, 23, 28, 0.96), rgba(13, 17, 21, 0.98));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .card,
+    .support-card,
+    .proof-panel,
+    .footer-panel {
+      padding: 22px;
+    }
+
+    .card h3,
+    .step h3,
+    .support-card h3 {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    .card p,
+    .step p,
+    .support-card p,
+    .proof-panel p {
+      color: var(--muted);
+      margin: 0;
     }
 
     .step {
-      padding: 22px;
-      border-radius: 22px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      box-shadow: var(--shadow);
+      padding: 20px;
     }
 
     .step-index {
-      width: 38px;
-      height: 38px;
+      width: 34px;
+      height: 34px;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      margin-bottom: 16px;
-      color: #11160d;
+      background: var(--accent);
+      color: #11150b;
       font-weight: 800;
-      background: linear-gradient(135deg, var(--accent), var(--accent-3));
+      margin-bottom: 14px;
+      font-size: 14px;
     }
 
-    pre {
-      margin: 0;
+    .step pre,
+    .proof-flow {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.025);
+      color: var(--soft);
+      font-family: "Consolas", "SFMono-Regular", monospace;
+      font-size: 13px;
+      line-height: 1.8;
       white-space: pre-wrap;
       word-break: break-word;
-      font-family: "Consolas", "SFMono-Regular", monospace;
-      color: #eef4dd;
+    }
+
+    .proof-flow {
+      color: var(--text);
+    }
+
+    .support-card ul {
+      margin: 14px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
     }
 
     .footer-panel {
-      margin-top: 26px;
-      padding: 26px;
-      border-radius: 24px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(17, 24, 34, 0.84), rgba(11, 17, 25, 0.92));
-      box-shadow: var(--shadow);
+      margin-top: 42px;
       display: flex;
       justify-content: space-between;
       gap: 18px;
-      flex-wrap: wrap;
       align-items: center;
+      flex-wrap: wrap;
     }
 
     .footer-panel p {
       margin: 0;
+      max-width: 60ch;
       color: var(--muted);
-      max-width: 58ch;
     }
 
     @media (max-width: 980px) {
       .hero,
-      .card-grid,
-      .compare-grid,
-      .steps {
+      .grid-3,
+      .grid-4,
+      .steps,
+      .support-grid,
+      .runtime-grid,
+      .support-list {
         grid-template-columns: 1fr;
-      }
-
-      .hero-copy,
-      .proof-card {
-        padding: 26px;
       }
 
       h1 {
@@ -464,13 +488,13 @@
       <nav>
         <div class="brand">
           <span class="brand-mark"></span>
-          <span>Grasp / Runtime Artifact</span>
+          <span>Grasp Runtime</span>
         </div>
         <div class="nav-links">
           <a href="../README.md">README</a>
           <a href="../README.zh-CN.md">中文 README</a>
-          <a href="./product/browser-runtime-for-agents.md">Product Page</a>
           <a href="./reference/mcp-tools.md">MCP Tools</a>
+          <a href="./product/browser-runtime-for-agents.md">Product Model</a>
         </div>
       </nav>
     </div>
@@ -478,147 +502,101 @@
 
   <main class="wrap">
     <section class="hero">
-        <div class="panel hero-copy">
-          <span class="eyebrow">Route By Evidence</span>
-          <h1>One URL. One best path.</h1>
-          <p>
-          Grasp is the route-aware AI Browser Runtime. It chooses the best web path before execution starts, then keeps
-          work continuous across login, checkpoints, confirmed browser boundaries, human handoff, and resumed execution
-          instead of collapsing into disposable tabs, brittle scripts, or headless one-site automation.
-          </p>
-          <div class="hero-stats">
-            <span class="pill">Route By Evidence</span>
-            <span class="pill">Visible Runtime</span>
-            <span class="pill">Continuity</span>
-            <span class="pill">Verification</span>
-            <span class="pill">Recovery</span>
-        </div>
-        <div class="cta-row">
-          <a class="primary" href="../README.md#quickstart">Get the first win</a>
-          <a href="./product/browser-runtime-for-agents.md">Read the product model</a>
-        </div>
-        <p class="proof-note">Works with Claude Code, Codex, Cursor-style MCP clients, and Alma. The dedicated runtime can use Chrome or Edge, but always stays inside the same `chrome-grasp` browser boundary.</p>
-      </div>
-
-      <div class="panel proof-card">
-        <div>
-          <div class="proof-label">Proof of the runtime</div>
-          <div class="code-loop">
-            <span>entry(url, intent)</span>
-            <span>inspect()</span>
-            <span>request_handoff(...)</span>
-            <span>mark_handoff_done()</span>
-            <span>resume_after_handoff()</span>
-            <span>continue()</span>
-          </div>
-        </div>
-        <p class="proof-note">
-          Opening a page is not the proof. Working inside a confirmed visible browser context, surviving a human step,
-          and continuing from evidence is the proof.
+      <div class="panel hero-copy">
+        <span class="eyebrow">Runtime Ready</span>
+        <h1>A browser runtime that can keep working.</h1>
+        <p class="lead">
+          Grasp launches a dedicated browser for your agent, chooses the best route before acting,
+          verifies page-changing work, and resumes after handoff instead of starting over.
         </p>
-        <div class="proof-result">
-          <strong>What the loop returns</strong>
-          <ul>
-            <li><code>entry(url, intent)</code> can return the selected route, evidence, and fallback boundary</li>
-            <li><code>inspect()</code> can surface <code>handoff_required</code> instead of pretending the task is done</li>
-            <li><code>resume_after_handoff()</code> can return <code>resumed_verified</code> with continuation evidence</li>
-            <li><code>continue()</code> can route the task forward without restarting the browser session</li>
-          </ul>
+        <p class="sublead">
+          This is not a disposable tab and not a one-off script. It is a visible runtime boundary for real web work.
+        </p>
+
+        <div class="hero-actions">
+          <a class="btn primary" href="../README.md#quickstart">Get the first win</a>
+          <a class="btn" href="./reference/mcp-tools.md">See the runtime surface</a>
+        </div>
+
+        <div class="meta-row">
+          <span class="meta-chip"><strong>Route</strong> one URL, one best path</span>
+          <span class="meta-chip"><strong>Verify</strong> page change, not wishful thinking</span>
+          <span class="meta-chip"><strong>Recover</strong> handoff and resume in the same session</span>
         </div>
       </div>
+
+      <aside class="panel status-card">
+        <div class="status-head">
+          <h2>Current runtime model</h2>
+          <span class="status-pill">Ready</span>
+        </div>
+
+        <div class="runtime-grid">
+          <div class="runtime-stat">
+            <span>Browser</span>
+            <strong>Chrome / Edge</strong>
+          </div>
+          <div class="runtime-stat">
+            <span>Mode</span>
+            <strong>Windowed</strong>
+          </div>
+          <div class="runtime-stat">
+            <span>Profile</span>
+            <strong>chrome-grasp</strong>
+          </div>
+          <div class="runtime-stat">
+            <span>Next step</span>
+            <strong>get_status</strong>
+          </div>
+        </div>
+
+        <p class="runtime-note">
+          Grasp uses its own dedicated browser boundary. Log in once there, and the runtime can keep using the same session.
+        </p>
+
+        <div>
+          <h2 style="font-size:16px; margin-bottom:10px;">Works with</h2>
+          <div class="support-list">
+            <div class="support-item">Claude Code</div>
+            <div class="support-item">Codex CLI</div>
+            <div class="support-item">Cursor / Claude Desktop</div>
+            <div class="support-item">Alma</div>
+          </div>
+        </div>
+      </aside>
     </section>
 
     <section>
       <div class="section-head">
         <div>
-          <span class="eyebrow">Where The Moat Compounds</span>
-          <h2>The hard part is not opening pages.</h2>
+          <span class="eyebrow">Start Here</span>
+          <h2 class="section-title">Three steps to your first real win.</h2>
         </div>
         <p>
-          Most browser automation breaks after login, after a checkpoint, or after a human needs to step in once.
-          Grasp compounds around the parts that are hard to fake.
+          The first win is not “it opened a page.” The first win is that the agent can choose a route,
+          explain it, and stay inside the same runtime as the task gets real.
         </p>
       </div>
-
-      <div class="card-grid">
-        <article class="card">
-          <h3>Continuity</h3>
-          <p>Tasks survive login state, checkpoint pages, and context switching instead of restarting from scratch.</p>
-        </article>
-        <article class="card">
-          <h3>Verification</h3>
-          <p>Actions are checked against actual page changes, not treated as success because a tool call returned.</p>
-        </article>
-        <article class="card">
-          <h3>Recovery</h3>
-          <p>Humans can step in, agents can resume, and the same browser context keeps the task coherent.</p>
-        </article>
-      </div>
-    </section>
-
-    <section>
-        <div class="section-head">
-          <div>
-            <span class="eyebrow">What Changes</span>
-            <h2>From automation wrapper to route-aware runtime.</h2>
-          </div>
-          <p>
-          Publicly, Grasp is a route-aware runtime for agents. If that runtime keeps compounding across real web work,
-          it becomes the operating layer agents rely on.
-          </p>
-        </div>
-
-      <div class="compare-grid">
-        <article class="compare">
-          <span class="eyebrow">Ordinary Browser Automation</span>
-          <p class="compare-copy">Useful for getting one step done. Fragile when the task becomes real.</p>
-          <ul>
-            <li>opens a page, then forgets the broader task</li>
-            <li>assumes actions worked because the call returned</li>
-            <li>breaks when login or handoff interrupts the flow</li>
-          </ul>
-        </article>
-        <article class="compare">
-          <span class="eyebrow">Grasp Runtime</span>
-          <p class="compare-copy">Built for work that stays real after the first page load.</p>
-          <ul>
-            <li>treats any real webpage as part of the same task model</li>
-            <li>keeps evidence, continuation, and recovery first-class</li>
-            <li>lets agents re-enter the same browser context instead of replaying</li>
-          </ul>
-        </article>
-      </div>
-    </section>
-
-    <section>
-        <div class="section-head">
-          <div>
-            <span class="eyebrow">First Win</span>
-            <h2>Three steps to feel the product.</h2>
-          </div>
-          <p>
-          The first win is not “it can open a page.” The first win is that the agent can enter a real page, choose a
-          route, explain it, and stay inside the same runtime as the task gets harder.
-          </p>
-        </div>
 
       <div class="steps">
         <article class="step">
           <div class="step-index">1</div>
           <h3>Bootstrap</h3>
-          <p>Run the local runtime and keep using the dedicated `chrome-grasp` profile.</p>
-<pre>npx -y @yuzc-001/grasp</pre>
+          <p>Start the dedicated runtime locally. Grasp will detect Chrome or Edge, then launch the visible runtime browser.</p>
+          <pre>npx -y @yuzc-001/grasp</pre>
         </article>
+
         <article class="step">
           <div class="step-index">2</div>
-          <h3>Connect</h3>
-          <p>Add Grasp to your AI client so the agent can use the same runtime surface.</p>
-<pre>claude mcp add grasp -- npx -y @yuzc-001/grasp</pre>
+          <h3>Connect your agent</h3>
+          <p>Use the same MCP runtime with your agent client so it can work in the dedicated browser session.</p>
+          <pre>claude mcp add grasp -- npx -y @yuzc-001/grasp</pre>
         </article>
+
         <article class="step">
           <div class="step-index">3</div>
           <h3>Run the loop</h3>
-          <p>Ask the agent to check status, enter a real page with intent, then inspect, continue, and explain the route.</p>
+          <p>Ask the agent to enter a real page, inspect the route, and continue from evidence.</p>
           <pre>get_status
 entry(url, intent)
 inspect()
@@ -628,17 +606,103 @@ explain_route()</pre>
       </div>
     </section>
 
-    <div class="footer-panel">
-      <div>
-        <span class="eyebrow">Delivery Surfaces</span>
+    <section>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Why Grasp</span>
+          <h2 class="section-title">The hard part is not opening a page.</h2>
+        </div>
         <p>
-`npx -y @yuzc-001/grasp` / `grasp connect` bootstrap the runtime locally. MCP tools expose the public runtime surface.
-          The skill is the recommended task-facing layer on top of the same interface.
+          Most browser automation falls apart after login, after a checkpoint, or after a human needs to step in once.
+          Grasp compounds around the parts that are hard to fake.
         </p>
       </div>
-      <div class="cta-row">
-        <a class="primary" href="./reference/mcp-tools.md">See the runtime surface</a>
-        <a href="./product/browser-runtime-for-agents.md">See the full product definition</a>
+
+      <div class="grid-4">
+        <article class="card">
+          <h3>Route</h3>
+          <p>Choose the best path first. Public read, live session, form, workspace, or handoff are runtime decisions, not user memory tests.</p>
+        </article>
+        <article class="card">
+          <h3>Verification</h3>
+          <p>Actions are judged by real page state change, not by the fact that a tool call returned without throwing.</p>
+        </article>
+        <article class="card">
+          <h3>Recovery</h3>
+          <p>Human handoff is not a failure mode. It is part of the runtime and can resume from evidence instead of replaying everything.</p>
+        </article>
+        <article class="card">
+          <h3>Dedicated Browser</h3>
+          <p>The agent works in one visible browser boundary instead of guessing across arbitrary windows and disposable sessions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Proof</span>
+          <h2 class="section-title">What proves this is a runtime.</h2>
+        </div>
+        <p>
+          A real task does not restart from scratch just because a human had to help once.
+          The loop below is the smallest proof that Grasp is more than a page opener.
+        </p>
+      </div>
+
+      <div class="proof-panel">
+        <div class="proof-flow">entry(url, intent)
+inspect()
+request_handoff(...)
+mark_handoff_done()
+resume_after_handoff()
+continue()</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Support Surface</span>
+          <h2 class="section-title">One runtime, clear boundaries.</h2>
+        </div>
+        <p>
+          Grasp is delivered through CLI bootstrap, MCP tools, and the task-facing skill layer.
+          Those are delivery surfaces for the same runtime, not separate product identities.
+        </p>
+      </div>
+
+      <div class="support-grid">
+        <article class="support-card">
+          <h3>Clients</h3>
+          <ul>
+            <li>Claude Code</li>
+            <li>Codex CLI</li>
+            <li>Cursor / Claude Desktop style MCP clients</li>
+            <li>Alma</li>
+          </ul>
+        </article>
+        <article class="support-card">
+          <h3>Browsers</h3>
+          <ul>
+            <li>Chrome</li>
+            <li>Edge</li>
+            <li>Dedicated visible runtime by default</li>
+            <li>Shared session continuity through <code>chrome-grasp</code></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <div class="footer-panel">
+      <p>
+        Grasp should feel like a truthful browser runtime for agents: visible, route-aware, verified, and recoverable.
+        Start from the dedicated browser, then enter a real page and let the runtime choose the path.
+      </p>
+      <div class="hero-actions" style="margin-top:0;">
+        <a class="btn primary" href="../README.md#quickstart">Quickstart</a>
+        <a class="btn" href="./reference/mcp-tools.md">MCP Tools</a>
+        <a class="btn" href="./release-notes-v0.6.7.md">Release Notes</a>
       </div>
     </div>
   </main>

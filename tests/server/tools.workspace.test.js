@@ -29,6 +29,7 @@ test('workspace_inspect returns task_kind workspace with live items and composer
 
   registerWorkspaceTools(server, state, {
     getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    getBrowserInstance: async () => confirmedInstance,
     syncPageState: async () => undefined,
     collectVisibleWorkspaceSnapshot: async () => ({
       workspace_surface: 'thread',
@@ -49,6 +50,8 @@ test('workspace_inspect returns task_kind workspace with live items and composer
   assert.equal(result.meta.result.workspace.workspace_surface, 'thread');
   assert.equal(result.meta.result.workspace.live_items.length, 1);
   assert.equal(result.meta.agent_boundary.key, 'workspace_runtime');
+  assert.equal(result.meta.runtime.instance.display, 'windowed');
+  assert.equal(result.meta.runtime_state.evidence_anchor.instance_display, 'windowed');
   assert.match(result.content[0].text, /Boundary: workspace_runtime/);
 });
 
@@ -1236,6 +1239,46 @@ test('verify_outcome preserves blocked and gated safety behavior without mutatin
     assert.deepEqual(state, before);
     assert.deepEqual(mutations, []);
   }
+});
+
+test('verify_outcome includes runtime evidence on workspace surfaces', async () => {
+  const calls = [];
+  const state = {
+    pageState: { currentRole: 'workspace', workspaceSurface: 'thread', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  const server = { registerTool(name, spec, handler) { calls.push({ name, spec, handler }); } };
+  registerWorkspaceTools(server, state, {
+    getActivePage: async () => ({ title: async () => 'BOSS直聘', url: () => 'https://www.zhipin.com/web/geek/chat?id=1' }),
+    getBrowserInstance: async () => confirmedInstance,
+    syncPageState: async () => undefined,
+    collectVisibleWorkspaceSnapshot: async () => ({
+      workspace_surface: 'thread',
+      live_items: [{ label: '李女士', selected: true }],
+      active_item: { label: '李女士' },
+      composer: { kind: 'chat_composer', draft_present: false },
+      action_controls: [{ label: '发送', action_kind: 'send' }],
+      blocking_modals: [],
+      loading_shell: false,
+      detail_alignment: 'aligned',
+      outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: true },
+      summary: {
+        active_item_label: '李女士',
+        draft_present: false,
+        loading_shell: false,
+        blocking_modal_present: false,
+        detail_alignment: 'aligned',
+        outcome_signals: { delivered: false, composer_cleared: false, active_item_stable: true },
+        ready_for_next_action: 'draft_action',
+      },
+    }),
+  });
+
+  const result = await calls.find((entry) => entry.name === 'verify_outcome').handler({});
+
+  assert.equal(result.meta.runtime.instance.display, 'windowed');
+  assert.equal(result.meta.runtime_state.evidence_anchor.instance_display, 'windowed');
 });
 
 test('registerTools registers workspace tools after form tools and before strategy tools', () => {

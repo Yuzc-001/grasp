@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createConnectionSupervisor, getActivePage } from '../../src/layer1-bridge/chrome.js';
+import { createConnectionSupervisor, getActivePage, pinTargetPage } from '../../src/layer1-bridge/chrome.js';
 
 test('supervisor marks browser unreachable after bounded retries', async () => {
   let attempt = 0;
@@ -113,4 +113,83 @@ test('getActivePage creates a blank tab when the browser context has no pages', 
 
   assert.equal(page, blankPage);
   assert.equal(newPageCalls, 1);
+});
+
+test('pinTargetPage retries transient title reads and records the target host', async () => {
+  const state = {};
+  let titleReads = 0;
+  const page = {
+    url: () => 'https://www.zhipin.com/',
+    title: async () => {
+      titleReads += 1;
+      if (titleReads === 1) {
+        throw new Error('Execution context was destroyed, most likely because of a navigation.');
+      }
+      return 'BOSS直聘';
+    },
+  };
+
+  const target = await pinTargetPage(page, state);
+
+  assert.equal(target.page, page);
+  assert.equal(target.url, 'https://www.zhipin.com/');
+  assert.equal(target.host, 'www.zhipin.com');
+  assert.equal(target.title, 'BOSS直聘');
+  assert.equal(state.targetSession, target);
+  assert.equal(titleReads, 2);
+});
+
+test('getActivePage keeps the pinned page across same-host redirects', async () => {
+  const state = {};
+  let currentUrl = 'https://www.zhipin.com/';
+  const pinnedPage = {
+    url: () => currentUrl,
+    title: async () => 'BOSS直聘',
+    isClosed: () => false,
+  };
+  const fallbackPage = {
+    url: () => 'https://example.com/',
+    evaluate: async () => true,
+    isClosed: () => false,
+  };
+  const browser = {
+    contexts: () => [{
+      pages: () => [fallbackPage, pinnedPage],
+    }],
+  };
+
+  await pinTargetPage(pinnedPage, state);
+  currentUrl = 'https://www.zhipin.com/zhengzhou/?seoRefer=index';
+
+  const page = await getActivePage({ state, browser });
+
+  assert.equal(page, pinnedPage);
+});
+
+test('getActivePage drops the pinned page after a cross-host navigation', async () => {
+  const state = {};
+  let currentUrl = 'https://www.zhipin.com/';
+  const pinnedPage = {
+    url: () => currentUrl,
+    title: async () => 'BOSS直聘',
+    isClosed: () => false,
+  };
+  const fallbackPage = {
+    url: () => 'https://example.com/',
+    evaluate: async () => true,
+    isClosed: () => false,
+  };
+  const browser = {
+    contexts: () => [{
+      pages: () => [fallbackPage, pinnedPage],
+    }],
+  };
+
+  await pinTargetPage(pinnedPage, state);
+  currentUrl = 'https://example.com/';
+
+  const page = await getActivePage({ state, browser });
+
+  assert.equal(page, fallbackPage);
+  assert.equal(state.targetSession, null);
 });

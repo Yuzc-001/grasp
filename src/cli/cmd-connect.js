@@ -2,13 +2,15 @@ import { spawn } from 'child_process';
 import { join } from 'path';
 import { homedir, platform } from 'os';
 import { readConfig, writeConfig } from './config.js';
+
 import { detectChromePath } from './detect-chrome.js';
+
 import { detectClients, autoConfigureAll } from './auto-configure.js';
+
+import { formatBanner, formatErrorCopy, formatStep, printBlock } from './output.js';
+
 import { readBrowserInstance } from '../runtime/browser-instance.js';
 
-const STEP_OK   = '[ok]';
-const STEP_WAIT = '[..]';
-const STEP_FAIL = '[!!]';
 
 async function launchChrome(chromePath, cdpUrl) {
   const port = new URL(cdpUrl).port || '9222';
@@ -36,61 +38,110 @@ export async function runConnect() {
   const cdpUrl = process.env.CHROME_CDP_URL || config.cdpUrl;
   const userDataDir = join(homedir(), 'chrome-grasp');
 
-  console.log('');
-  console.log('  Grasp Runtime Setup');
-  console.log('  ' + '─'.repeat(44));
-  console.log('  Bring a Chrome CDP session into the runtime.');
+  printBlock(formatBanner('Grasp Runtime Setup', 'Bring a Chrome CDP session into the runtime.'));
+
   console.log('  One URL, one best path.');
+
   console.log('');
+
 
   // Step 1: detect Chrome
   const chromePath = detectChromePath();
   if (chromePath) {
-    console.log(`  ${STEP_OK} Chrome found`);
-    console.log(`       ${chromePath}`);
+
+    printBlock(formatStep('ok', 'Chrome found', chromePath));
+
   } else {
-    console.log(`  ${STEP_FAIL} Chrome not found`);
-    console.log('');
-    console.log('  Install Google Chrome and try again:');
-    console.log('  https://www.google.com/chrome/');
-    console.log('');
+
+    printBlock(formatStep('fail', 'Chrome not found'));
+
+    printBlock(formatErrorCopy({
+
+      whatHappened: 'Grasp could not find a local Chrome installation for the dedicated browser runtime.',
+
+      tried: ['Checked the common install locations for this operating system.'],
+
+      nextSteps: ['Install Google Chrome from https://www.google.com/chrome/.', 'Run grasp doctor or grasp connect again.'],
+
+    }));
+
     process.exit(1);
+
   }
+
 
   // Step 2: check or launch Chrome with CDP
   console.log('');
-  console.log(`  ${STEP_WAIT} Ensuring browser runtime at ${cdpUrl} ...`);
+
+  printBlock(formatStep('wait', `Ensuring browser runtime at ${cdpUrl} ...`));
+
   let chromeInfo = await readBrowserInstance(cdpUrl);
   let launchedDedicatedProfile = false;
 
   if (!chromeInfo) {
-    console.log(`  ${STEP_WAIT} Chrome not running, launching dedicated profile...`);
+
+    printBlock(formatStep('wait', 'Chrome not running, launching dedicated profile...'));
+
     chromeInfo = await launchChrome(chromePath, cdpUrl);
+
     launchedDedicatedProfile = chromeInfo !== null;
+
   }
+
+
 
   if (!chromeInfo) {
-    console.log(`  ${STEP_FAIL} Failed to bring the browser runtime online`);
-    console.log('');
-    console.log('  Try running manually:');
-    if (platform() === 'win32') {
-      console.log('    start-chrome.bat');
-    } else {
-      console.log(`    "${chromePath}" --remote-debugging-port=9222 --user-data-dir=$HOME/chrome-grasp`);
-    }
-    console.log('');
+
+    printBlock(formatStep('fail', 'Failed to bring the browser runtime online'));
+
+    printBlock(formatErrorCopy({
+
+      whatHappened: 'Grasp could not start or reach the dedicated chrome-grasp browser runtime.',
+
+      tried: [
+
+        `Attempted to connect to ${cdpUrl}.`,
+
+        'Tried launching a dedicated chrome-grasp profile automatically.',
+
+      ],
+
+      nextSteps: [
+
+        platform() === 'win32'
+
+          ? 'Run start-chrome.bat to launch the dedicated browser runtime manually.'
+
+          : `Launch Chrome manually: "${chromePath}" --remote-debugging-port=9222 --user-data-dir=$HOME/chrome-grasp`,
+
+        'Run grasp doctor for a focused setup diagnosis.',
+
+      ],
+
+    }));
+
     process.exit(1);
+
   }
 
-  console.log(`  ${STEP_OK} Browser runtime ready  (${chromeInfo.browser ?? 'unknown'})`);
-  console.log(`       Profile: ${userDataDir}`);
+
+
+  printBlock(formatStep('ok', `Browser runtime ready (${chromeInfo.browser ?? 'unknown'})`, `Profile: ${userDataDir}`));
+
   console.log(`       Instance: ${chromeInfo.display === 'headless' ? 'headless browser' : chromeInfo.display === 'windowed' ? 'windowed browser' : 'unknown browser mode'}`);
+
   if (launchedDedicatedProfile) {
+
     console.log('       Scope: dedicated chrome-grasp profile, not an arbitrary existing browser session');
+
   }
+
   if (chromeInfo.warning) {
+
     console.log(`       Warning: ${chromeInfo.warning}`);
+
   }
+
 
   // Step 3: save cdpUrl to config
   await writeConfig({ cdpUrl });
@@ -101,31 +152,36 @@ export async function runConnect() {
     const tabs = await tabsRes.json();
     const tab = tabs.find(t => t.type === 'page' && t.url && !t.url.startsWith('chrome://'));
     if (tab) {
-      console.log(`  ${STEP_OK} Current page: ${tab.title?.slice(0, 50) || tab.url}`);
+      printBlock(formatStep('ok', `Current page: ${tab.title?.slice(0, 50) || tab.url}`));
+
     }
   } catch { /* ignore */ }
 
   // Step 5: auto-configure AI clients
   console.log('');
-  console.log(`  ${STEP_WAIT} Connecting AI clients...`);
+
+  printBlock(formatStep('wait', 'Connecting AI clients...'));
+
   const clients = detectClients();
 
-  if (clients.length === 0) {
-    console.log(`  ${STEP_FAIL} No AI clients found`);
-    console.log('');
-    console.log('  Add Grasp manually to your AI client config:');
-      console.log('    { "mcpServers": { "grasp": { "command": "npx", "args": ["-y", "@yuzc-001/grasp"] } } }');
-  } else {
-    const results = await autoConfigureAll(clients);
-    for (const { label, result } of results) {
-      if (result === 'written') {
-        console.log(`  ${STEP_OK} ${label}  — config written`);
-      } else if (result === 'already-configured') {
-        console.log(`  ${STEP_OK} ${label}  — already configured`);
-      } else {
-        console.log(`  ${STEP_FAIL} ${label}  — failed, add manually`);
-      }
-    }
+  if (clients.length === 0) {
+    printBlock(formatStep('fail', 'No AI clients found'));
+    printBlock(formatErrorCopy({
+      whatHappened: 'Grasp did not detect a supported AI client it could configure automatically.',
+      tried: ['Checked for Claude Code, Codex CLI, and Cursor on this machine.'],
+      nextSteps: ['Add Grasp manually to your AI client config.', '{ "mcpServers": { "grasp": { "command": "npx", "args": ["-y", "@yuzc-001/grasp"] } } }'],
+    }));
+  } else {
+    const results = await autoConfigureAll(clients);
+    for (const { label, result } of results) {
+      if (result === 'written') {
+        printBlock(formatStep('ok', `${label} — config written`));
+      } else if (result === 'already-configured') {
+        printBlock(formatStep('ok', `${label} — already configured`));
+      } else {
+        printBlock(formatStep('fail', `${label} — failed, add manually`));
+      }
+    }
 
     const needsRestart = results
       .filter(r => r.result === 'written')

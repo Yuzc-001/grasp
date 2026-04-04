@@ -1,4 +1,10 @@
+import { WORKSPACE_SIGNAL_DICTIONARY, containsAnySignal, signalMatchCount } from '../../server/page-signals.js';
+
+
+
+
 export function createPageGraspState() {
+
   return {
     lastUrl: null,
     domRevision: 0,
@@ -81,6 +87,14 @@ function getUrlPath(url) {
   }
 }
 
+function getUrlHostname(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 function getUrlPathSegments(url) {
   return getUrlPath(url).split('/').filter(Boolean);
 }
@@ -92,64 +106,65 @@ function hasWorkspacePathEvidence(url) {
 }
 
 function detectWorkspaceSignals({ url, title = '', bodyText = '', headings = [], navs = 0 }) {
+
   const text = bodyText.toLowerCase();
+
   const signals = [];
 
+
+
   if (hasWorkspacePathEvidence(url)) {
+
     signals.push('workspace_path');
+
   }
-  if (text.includes('按enter键发送')) {
+
+  if (containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.composerPrompts)) {
+
     signals.push('workspace_composer_text');
+
   }
-  if (text.includes('发消息')) {
-    signals.push('workspace_composer_text');
-  }
-  if (text.includes('发送消息')) {
-    signals.push('workspace_composer_text');
-  }
-  if (text.includes('输入消息')) {
-    signals.push('workspace_composer_text');
-  }
-  if (text.includes('消息') || text.includes('聊天') || text.includes('对话')) {
+
+  if (containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.threadContext)) {
+
     signals.push('workspace_thread_text');
+
   }
+
   if (navs >= 6) {
+
     signals.push('workspace_navigation');
+
   }
+
+
 
   return [...new Set(signals)];
+
 }
 
-function scoreWorkspaceSurface({ url, bodyText = '' }) {
-  const text = bodyText.toLowerCase();
-  let threadScore = hasWorkspacePathEvidence(url) ? 2 : 0;
-  let composerScore = 0;
-  let loadingScore = 0;
 
-  if (text.includes('按enter键发送')) {
-    composerScore += 3;
-  }
-  if (text.includes('发消息')) {
-    composerScore += 3;
-  }
-  if (text.includes('发送消息')) {
-    composerScore += 3;
-  }
-  if (text.includes('输入消息')) {
-    composerScore += 3;
-  }
-  if (text.includes('消息')) {
-    threadScore += 1;
-  }
-  if (text.includes('聊天') || text.includes('对话')) {
-    threadScore += 1;
-  }
-  if (text.includes('加载中，请稍候')) {
-    loadingScore += 2;
-  }
 
-  return { threadScore, composerScore, loadingScore };
-}
+function scoreWorkspaceSurface({ url, bodyText = '' }) {
+
+  const text = bodyText.toLowerCase();
+  const composerMatches = signalMatchCount(text, WORKSPACE_SIGNAL_DICTIONARY.composerPrompts);
+  const threadMatches = signalMatchCount(text, WORKSPACE_SIGNAL_DICTIONARY.threadContext);
+
+  let threadScore = hasWorkspacePathEvidence(url) ? 2 : 0;
+  let composerScore = composerMatches * 2;
+  let loadingScore = 0;
+
+  threadScore += threadMatches;
+
+  if (containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.loadingShell)) {
+    loadingScore += 2;
+  }
+
+  return { threadScore, composerScore, loadingScore };
+
+}
+
 
 function classifyWorkspaceSurface(scores = {}) {
   const { threadScore = 0, composerScore = 0, loadingScore = 0 } = scores;
@@ -174,12 +189,32 @@ function classifyWorkspaceRole({ url, bodyText = '', headings = [] }) {
   return Math.max(scores.threadScore, scores.composerScore) >= 2 ? scores : null;
 }
 
+function isWeChatPublicPlatformLanding({ url, title = '', bodyText = '', headings = [], forms = 0 }) {
+  if (getUrlHostname(url) !== 'mp.weixin.qq.com') return false;
+  if (getUrlPath(url) !== '/') return false;
+  if (forms <= 0) return false;
+
+  const text = bodyText.toLowerCase();
+  const titleText = String(title).toLowerCase();
+  const headingText = headings.join(' ').toLowerCase();
+  const signals = [
+    text.includes('微信扫一扫'),
+    text.includes('使用账号登录') || text.includes('账号登录'),
+    text.includes('立即注册'),
+    text.includes('服务号') || text.includes('公众号') || text.includes('小程序'),
+  ];
+
+  return (titleText.includes('微信公众平台') || headingText.includes('微信公众平台'))
+    && signals.filter(Boolean).length >= 2;
+}
+
 function classifyPageRole({ url, title = '', bodyText = '', nodes = 0, forms = 0, navs = 0, headings = [] }) {
   const text = bodyText.toLowerCase();
   const path = getUrlPath(url);
+  const titleText = String(title).toLowerCase();
 
   const searchHints = ['search results', 'no results', 'filter results'];
-  const formHints = ['submit', 'required', 'email', 'message'];
+  const formHints = ['submit', 'required'];
   const headingText = headings.join(' ').toLowerCase();
   const checkpointSignals = detectCheckpointSignals({ url, title, bodyText, headings, nodes });
   const workspaceScores = classifyWorkspaceRole({ url, bodyText, headings });
@@ -192,9 +227,15 @@ function classifyPageRole({ url, title = '', bodyText = '', nodes = 0, forms = 0
     return 'workspace';
   }
 
-  const authCopyPresent = ['sign in', 'log in', 'login'].some((hint) => text.includes(hint) || headingText.includes(hint));
-  const credentialPairPresent = text.includes('password') && text.includes('username');
-  if (authCopyPresent || credentialPairPresent || /\/login\b|\/signin\b/.test(path)) {
+  if (isWeChatPublicPlatformLanding({ url, title, bodyText, headings, forms })) {
+    return 'content';
+  }
+
+  const authHeadingPresent = ['sign in', 'log in', 'login'].some((hint) => titleText.includes(hint) || headingText.includes(hint));
+  const credentialCopyPresent = text.includes('password')
+    && ['username', 'email', 'email address', 'phone'].some((hint) => text.includes(hint));
+  const dominantAuthSurface = authHeadingPresent && (credentialCopyPresent || forms >= 1);
+  if (credentialCopyPresent || dominantAuthSurface || /\/login\b|\/signin\b|\/sign-in\b/.test(path)) {
     return 'auth';
   }
 
@@ -210,7 +251,7 @@ function classifyPageRole({ url, title = '', bodyText = '', nodes = 0, forms = 0
   }
   const hasFormText = formHints.some((hint) => text.includes(hint));
   const hasStrongFormSignals = forms >= 1 && hasFormText;
-  const hasDenseStandaloneForm = forms >= 3 && navs < 6;
+  const hasDenseStandaloneForm = forms >= 3 && navs < 6 && nodes <= 120;
   if (hasStrongFormSignals || hasDenseStandaloneForm) {
     return 'form';
   }

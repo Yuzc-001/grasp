@@ -216,3 +216,74 @@ test('explain_share_card exposes layout metadata for the current page share card
   assert.equal(result.meta.result.explain_card.estimated_height, 360);
   assert.match(result.content[0].text, /Explain card engine: pretext/);
 });
+
+test('share_page falls back when share card measurement crashes', async () => {
+  const { calls, server, state } = createServerAndState();
+  const page = createFakePage({
+    url: () => 'https://example.com/share',
+    title: () => 'Shareable Result',
+  });
+  const writtenArtifacts = [];
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+    waitUntilStable: async () => ({ stable: true, attempts: 1 }),
+    extractMainContent: async () => ({
+      title: 'Shareable Result',
+      text: '这是一个适合分享给家人和朋友的结果页面。',
+    }),
+    buildExplainShareCard: async () => {
+      throw new Error('window.__graspPretextMeasure is not a function');
+    },
+    writeArtifact: async (artifact) => {
+      writtenArtifacts.push(artifact);
+      return {
+        path: `/tmp/${artifact.filename}`,
+        bytes: Buffer.byteLength(String(artifact.data), artifact.encoding === 'utf8' ? 'utf8' : undefined),
+      };
+    },
+  });
+
+  const sharePage = calls.find((tool) => tool.name === 'share_page');
+  const result = await sharePage.handler({ format: 'markdown' });
+
+  assert.equal(writtenArtifacts.length, 1);
+  assert.equal(result.meta.result.explain_card.engine, 'fallback');
+  assert.equal(result.meta.result.artifact.format, 'markdown');
+  assert.match(result.content[0].text, /Status: direct/);
+});
+
+test('explain_share_card falls back when share card measurement crashes', async () => {
+  const { calls, server, state } = createServerAndState();
+  const page = createFakePage({
+    url: () => 'https://example.com/explain',
+    title: () => 'Explain Result',
+  });
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+    waitUntilStable: async () => ({ stable: true, attempts: 1 }),
+    extractMainContent: async () => ({
+      title: 'Explain Result',
+      text: '这里是正文内容，用于生成分享解释卡片。',
+    }),
+    buildExplainShareCard: async () => {
+      throw new Error('window.__graspPretextMeasure is not a function');
+    },
+  });
+
+  const explainShareCard = calls.find((tool) => tool.name === 'explain_share_card');
+  const result = await explainShareCard.handler({});
+
+  assert.equal(result.meta.status, 'direct');
+  assert.equal(result.meta.result.explain_card.engine, 'fallback');
+  assert.match(result.content[0].text, /Explain card engine: fallback/);
+});

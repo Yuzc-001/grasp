@@ -3,20 +3,51 @@ import { z } from 'zod';
 import { buildGatewayResponse } from './gateway-response.js';
 import { extractObservedContent } from './observe.js';
 import { assessGatewayContinuation } from './continuity.js';
-import { getActivePage } from '../layer1-bridge/chrome.js';
+import { getActivePage, readStablePageTitle } from '../layer1-bridge/chrome.js';
+
 import { syncPageState } from './state.js';
 import { enterWithStrategy } from './tools.strategy.js';
 import { readFastPath } from './fast-path-router.js';
-import { buildPageProjection } from './page-projection.js';
-import { selectEngine } from './engine-selection.js';
-import { decideRoute, resolveRouteIntent } from './route-policy.js';
+
+import { selectEngine } from './engine-selection.js';
+import { decideRoute } from './route-policy.js';
+
+import {
+
+  buildGatewayOutcome,
+
+  getBatchStatus,
+
+  getEffectiveEntryHandoff,
+
+  getGatewayContinuation,
+
+  getGatewayStatus,
+
+  getRouteForState,
+
+  projectPageContent,
+
+  rememberGatewayTask,
+
+  resolvedDirectEntry,
+
+  toGatewayPage,
+
+} from './tools.gateway.helpers.js';
+
 import { auditRouteDecision, readLatestRouteDecision } from './audit.js';
 import { textResponse } from './responses.js';
 import { ROUTE_BLOCKED } from './error-codes.js';
 import { readBrowserInstance } from '../runtime/browser-instance.js';
 import { requireConfirmedRuntimeInstance } from './runtime-confirmation.js';
 import { extractStructuredContent } from './structured-extraction.js';
-import { buildExplainShareCard as defaultBuildExplainShareCard } from './explain-share-card.js';
+import {
+  buildExplainShareCard as defaultBuildExplainShareCard,
+  buildFallbackExplainShareCard as defaultBuildFallbackExplainShareCard,
+} from './explain-share-card.js';
+import { clearHandoff as defaultClearHandoff } from '../grasp/handoff/events.js';
+import { writeHandoffState as defaultWriteHandoffState } from '../grasp/handoff/persist.js';
 import {
   buildBatchMarkdownBundle,
   buildShareHtml,
@@ -26,209 +57,11 @@ import {
   writeArtifactFile,
 } from './share-artifacts.js';
 
-function toGatewayPage({ title, url, pageState }, state, { preferCurrentUrl = false } = {}) {
-  const pageUrl = preferCurrentUrl
-    ? state.lastUrl ?? 'unknown'
-    : url ?? state.lastUrl ?? 'unknown';
-
-  return {
-    title: title ?? 'unknown',
-    url: pageUrl,
-    page_role: pageState?.currentRole ?? state.pageState?.currentRole ?? 'unknown',
-    grasp_confidence: pageState?.graspConfidence ?? state.pageState?.graspConfidence ?? 'unknown',
-    risk_gate: pageState?.riskGateDetected ?? state.pageState?.riskGateDetected ?? false,
-  };
-}
-
-function isBlockedHandoffState(handoffState) {
-  return handoffState === 'handoff_required'
-    || handoffState === 'handoff_in_progress'
-    || handoffState === 'awaiting_reacquisition';
-}
-
-function isGatedPageState(pageState = {}) {
-  return pageState.riskGateDetected || pageState.currentRole === 'checkpoint';
-}
-
-function getEntryDirectNextAction(pageState = {}) {
-  if (pageState.currentRole === 'workspace' || pageState.workspaceSurface != null) {
-    return 'workspace_inspect';
-  }
-  if (pageState.currentRole === 'form' || pageState.currentRole === 'auth') {
-    return 'form_inspect';
-  }
-  return 'extract';
-}
-
-function resolvedDirectEntry(outcome = {}) {
-  return outcome.verified === true && !isGatedPageState(outcome.pageState ?? {});
-}
-
-function getEffectiveEntryHandoff(outcome = {}) {
-  if (resolvedDirectEntry(outcome)) {
-    return {
-      ...(outcome.handoff ?? {}),
-      state: 'idle',
-    };
-  }
-
-  return outcome.handoff ?? null;
-}
-
-function getGatewayStatus(state) {
-  const pageState = state.pageState ?? {};
-  const handoffState = state.handoff?.state ?? 'idle';
-  if (isBlockedHandoffState(handoffState)) {
-    return 'handoff_required';
-  }
-  if (pageState.riskGateDetected || pageState.currentRole === 'checkpoint') {
-    return 'gated';
-  }
-  return 'direct';
-}
-
-function getGatewayContinuation(state, suggestedNextAction) {
-  const handoffState = state.handoff?.state ?? 'idle';
-  if (getGatewayStatus(state) !== 'direct') {
-    return {
-      can_continue: false,
-      suggested_next_action: 'request_handoff',
-      handoff_state: handoffState,
-    };
-  }
-
-  return {
-    can_continue: true,
-    suggested_next_action: suggestedNextAction,
-    handoff_state: handoffState,
-  };
-}
-
-function buildGatewayOutcome(outcome) {
-  const strategy = outcome.preflight?.recommended_entry_strategy ?? 'direct';
-  const trust = outcome.preflight?.session_trust ?? 'medium';
-  const handoffState = outcome.handoff?.state ?? 'idle';
-  const pageState = outcome.pageState ?? {};
-
-  if (resolvedDirectEntry(outcome)) {
-    return {
-      status: 'direct',
-      canContinue: true,
-      suggestedNextAction: getEntryDirectNextAction(pageState),
-    };
-  }
-
-  if (isBlockedHandoffState(handoffState) || isGatedPageState(pageState)) {
-    return {
-      status: 'gated',
-      canContinue: false,
-      suggestedNextAction: 'request_handoff',
-    };
-  }
-
-  if (strategy === 'handoff_or_preheat') {
-    return {
-      status: 'gated',
-      canContinue: false,
-      suggestedNextAction: outcome.pageState?.riskGateDetected ? 'request_handoff' : 'preheat_session',
-    };
-  }
-
-  if (strategy === 'preheat_before_direct_entry' || trust === 'low') {
-    return {
-      status: 'warmup',
-      canContinue: true,
-      suggestedNextAction: 'preheat_session',
-    };
-  }
-
-  return {
-    status: 'direct',
-    canContinue: true,
-    suggestedNextAction: 'inspect',
-  };
-}
-
-function getRouteForState({ url, state, intent = null }) {
-  const resolvedIntent = resolveRouteIntent({
-    intent,
-    pageState: state.pageState,
-    lastIntent: state.lastRouteTrace?.intent ?? null,
-  });
-
-  return decideRoute({
-    url,
-    intent: resolvedIntent,
-    selection: selectEngine({ tool: resolvedIntent, url }),
-    preflight: state.lastRouteTrace?.evidence
-      ? {
-          session_trust: state.lastRouteTrace.evidence.session_trust,
-          recommended_entry_strategy: state.lastRouteTrace.evidence.recommended_entry_strategy,
-        }
-      : {},
-    pageState: state.pageState,
-    handoff: state.handoff,
-  });
-}
-
-async function projectPageContent({
-  page,
-  state,
-  selection,
-  include_markdown = false,
-  deps = {},
-} = {}) {
-  const {
-    syncState,
-    observeContent,
-    readFastPathContent,
-    waitUntilStable,
-    extractMainContent,
-  } = deps;
-
-  if (selection.engine === 'runtime') {
-    await syncState(page, state, { force: true });
-    const fastPath = await readFastPathContent(page);
-    if (fastPath) {
-      return buildPageProjection({
-        ...selection,
-        surface: fastPath.surface,
-        title: fastPath.title,
-        url: fastPath.url,
-        mainText: fastPath.mainText,
-        includeMarkdown: include_markdown,
-      });
-    }
-  } else {
-    await syncState(page, state, { force: true });
-  }
-
-  const observed = await observeContent({
-    page,
-    deps: {
-      waitStable: waitUntilStable,
-      extractContent: extractMainContent,
-    },
-    include_markdown,
-  });
-
-  return buildPageProjection({
-    ...selection,
-    surface: 'content',
-    title: await page.title(),
-    url: page.url(),
-    mainText: observed.main_text,
-    markdown: observed.markdown,
-    includeMarkdown: include_markdown,
-  });
-}
-
-function getBatchStatus(records = []) {
-  if (records.length === 0) return 'direct';
-  const directCount = records.filter((record) => record.status === 'direct').length;
-  if (directCount === records.length) return 'direct';
-  if (directCount > 0) return 'mixed';
-  return 'handoff_required';
+function buildSafeExplainShareCard(buildExplainShareCard, buildFallbackExplainShareCard, page, projection, options = {}) {
+  return Promise
+    .resolve()
+    .then(() => buildExplainShareCard(page, projection, options))
+    .catch(() => buildFallbackExplainShareCard(projection, options));
 }
 
 export function registerGatewayTools(server, state, deps = {}) {
@@ -244,6 +77,9 @@ export function registerGatewayTools(server, state, deps = {}) {
   const writeArtifact = deps.writeArtifact ?? writeArtifactFile;
   const renderShareArtifact = deps.renderShareArtifact ?? renderShareArtifactFile;
   const buildExplainShareCard = deps.buildExplainShareCard ?? defaultBuildExplainShareCard;
+  const buildFallbackExplainShareCard = deps.buildFallbackExplainShareCard ?? defaultBuildFallbackExplainShareCard;
+  const clearHandoff = deps.clearHandoff ?? defaultClearHandoff;
+  const writeHandoffState = deps.writeHandoffState ?? defaultWriteHandoffState;
 
   server.registerTool(
     'entry',
@@ -259,7 +95,12 @@ export function registerGatewayTools(server, state, deps = {}) {
       const confirmationError = requireConfirmedRuntimeInstance(state, instance, 'entry');
       if (confirmationError) return confirmationError;
       const outcome = await enter({ url, state, deps: { auditName: 'entry' } });
-      const effectiveHandoff = getEffectiveEntryHandoff(outcome);
+      let effectiveHandoff = getEffectiveEntryHandoff(outcome);
+      if (resolvedDirectEntry(outcome)) {
+        effectiveHandoff = clearHandoff(outcome.handoff ?? state.handoff ?? {});
+        state.handoff = effectiveHandoff;
+        await writeHandoffState(effectiveHandoff);
+      }
       const gatewayOutcome = buildGatewayOutcome({
         ...outcome,
         handoff: effectiveHandoff,
@@ -285,7 +126,7 @@ export function registerGatewayTools(server, state, deps = {}) {
       state.lastRouteTrace = routeTrace;
       await auditRoute(routeTrace);
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: gatewayOutcome.status,
         page: toGatewayPage(outcome, state, { preferCurrentUrl }),
         continuation: {
@@ -298,6 +139,14 @@ export function registerGatewayTools(server, state, deps = {}) {
         route: routeTrace,
         ...(routeTrace.error_code ? { error_code: routeTrace.error_code } : {}),
       });
+      rememberGatewayTask(state, {
+        tool: 'entry',
+        status: response.meta?.status ?? gatewayOutcome.status,
+        summary: response.meta?.continuation?.suggested_next_action ?? null,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 
@@ -313,10 +162,10 @@ export function registerGatewayTools(server, state, deps = {}) {
       const instance = await getBrowserInstance();
       const route = getRouteForState({ url: page.url(), state });
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: getGatewayStatus(state),
         page: toGatewayPage({
-          title: await page.title(),
+          title: await readStablePageTitle(page),
           url: page.url(),
           pageState: state.pageState,
         }, state),
@@ -324,6 +173,14 @@ export function registerGatewayTools(server, state, deps = {}) {
         runtime: instance ? { instance } : {},
         route,
       });
+      rememberGatewayTask(state, {
+        tool: 'inspect',
+        status: response.meta?.status ?? getGatewayStatus(state),
+        summary: response.meta?.continuation?.suggested_next_action ?? null,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 
@@ -354,10 +211,10 @@ export function registerGatewayTools(server, state, deps = {}) {
         },
       });
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: getGatewayStatus(state),
         page: toGatewayPage({
-          title: result.title ?? await page.title(),
+          title: result.title ?? await readStablePageTitle(page),
           url: result.url ?? page.url(),
           pageState: state.pageState,
         }, state),
@@ -366,6 +223,14 @@ export function registerGatewayTools(server, state, deps = {}) {
         runtime: instance ? { instance } : {},
         route,
       });
+      rememberGatewayTask(state, {
+        tool: 'extract',
+        status: response.meta?.status ?? getGatewayStatus(state),
+        summary: result.summary ?? null,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 
@@ -407,7 +272,7 @@ export function registerGatewayTools(server, state, deps = {}) {
         ...(projection.markdown !== undefined ? { markdown: projection.markdown } : {}),
       };
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: getGatewayStatus(state),
         page: toGatewayPage({
           title: projection.title,
@@ -423,6 +288,16 @@ export function registerGatewayTools(server, state, deps = {}) {
         runtime: instance ? { instance } : {},
         route,
       });
+      rememberGatewayTask(state, {
+        tool: 'extract_structured',
+        status: response.meta?.status ?? getGatewayStatus(state),
+        summary: structured.missing_fields?.length
+          ? `missing:${structured.missing_fields.join(',')}`
+          : 'structured_ready',
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 
@@ -534,10 +409,10 @@ export function registerGatewayTools(server, state, deps = {}) {
       const batchStatus = getBatchStatus(records);
       const route = getRouteForState({ url: page.url(), state, intent: 'extract' });
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: batchStatus,
         page: toGatewayPage({
-          title: await page.title(),
+          title: await readStablePageTitle(page),
           url: page.url(),
           pageState: state.pageState,
         }, state),
@@ -559,6 +434,15 @@ export function registerGatewayTools(server, state, deps = {}) {
           `Next: inspect`,
         ],
       });
+      rememberGatewayTask(state, {
+        tool: 'extract_batch',
+        status: batchStatus,
+        summary: `${records.length} records`,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+        artifacts: Object.values(artifacts),
+      });
+      return response;
     }
   );
 
@@ -588,7 +472,12 @@ export function registerGatewayTools(server, state, deps = {}) {
           extractMainContent: deps.extractMainContent,
         },
       });
-      const explainCard = await buildExplainShareCard(page, projection);
+      const explainCard = await buildSafeExplainShareCard(
+        buildExplainShareCard,
+        buildFallbackExplainShareCard,
+        page,
+        projection
+      );
       let artifactMeta = null;
 
       if (format === 'markdown') {
@@ -607,7 +496,7 @@ export function registerGatewayTools(server, state, deps = {}) {
         });
       }
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: getGatewayStatus(state),
         page: toGatewayPage({
           title: projection.title,
@@ -626,6 +515,15 @@ export function registerGatewayTools(server, state, deps = {}) {
         runtime: instance ? { instance } : {},
         route,
       });
+      rememberGatewayTask(state, {
+        tool: 'share_page',
+        status: response.meta?.status ?? getGatewayStatus(state),
+        summary: format,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+        artifacts: [artifactMeta],
+      });
+      return response;
     }
   );
 
@@ -655,9 +553,15 @@ export function registerGatewayTools(server, state, deps = {}) {
           extractMainContent: deps.extractMainContent,
         },
       });
-      const explainCard = await buildExplainShareCard(page, projection, { width });
+      const explainCard = await buildSafeExplainShareCard(
+        buildExplainShareCard,
+        buildFallbackExplainShareCard,
+        page,
+        projection,
+        { width }
+      );
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: getGatewayStatus(state),
         page: toGatewayPage({
           title: projection.title,
@@ -680,6 +584,14 @@ export function registerGatewayTools(server, state, deps = {}) {
           `Next: share_page`,
         ],
       });
+      rememberGatewayTask(state, {
+        tool: 'explain_share_card',
+        status: response.meta?.status ?? getGatewayStatus(state),
+        summary: `${explainCard.engine}:${explainCard.estimated_height}px`,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 
@@ -696,10 +608,10 @@ export function registerGatewayTools(server, state, deps = {}) {
       const outcome = await assessGatewayContinuation(page, state);
       const route = getRouteForState({ url: page.url(), state });
 
-      return buildGatewayResponse({
+      const response = buildGatewayResponse({
         status: outcome.status,
         page: toGatewayPage({
-          title: await page.title(),
+          title: await readStablePageTitle(page),
           url: page.url(),
           pageState: state.pageState,
         }, state),
@@ -707,6 +619,14 @@ export function registerGatewayTools(server, state, deps = {}) {
         runtime: instance ? { instance } : {},
         route,
       });
+      rememberGatewayTask(state, {
+        tool: 'continue',
+        status: response.meta?.status ?? outcome.status,
+        summary: response.meta?.continuation?.suggested_next_action ?? null,
+        route: response.meta?.route ?? null,
+        page: response.meta?.page ?? null,
+      });
+      return response;
     }
   );
 

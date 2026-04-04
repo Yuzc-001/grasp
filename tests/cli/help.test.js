@@ -8,6 +8,8 @@ test('renderHelpText describes the runtime help', () => {
   assert.match(renderHelpText(), /Connect Chrome once\./i);
   assert.match(renderHelpText(), /grasp\s+Bootstrap the runtime/i);
   assert.match(renderHelpText(), /grasp explain/i);
+  assert.match(renderHelpText(), /grasp tasks/i);
+  assert.match(renderHelpText(), /grasp artifacts/i);
   assert.match(renderHelpText(), /entry\(url, intent\) \/ inspect \/ extract or continue \/ explain_route/i);
 });
 

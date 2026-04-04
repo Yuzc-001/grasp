@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFakePage } from '../helpers/fake-page.js';
+
 import { registerGatewayTools } from '../../src/server/tools.gateway.js';
+
+import { resolveGatewayDeps } from '../../src/server/tools.gateway.deps.js';
+
 
 function createBossPage({ url, title, selectors }) {
   return createFakePage({
@@ -24,7 +28,22 @@ function createBossPage({ url, title, selectors }) {
   });
 }
 
-test('entry returns a gateway response with strategy metadata', async () => {
+test('resolveGatewayDeps preserves explicit overrides and fills defaults', async () => {
+  const explicit = {
+    enterWithStrategy: async () => 'entered',
+    getActivePage: async () => 'page',
+  };
+
+  const resolved = resolveGatewayDeps(explicit);
+
+  assert.equal(resolved.enter, explicit.enterWithStrategy);
+  assert.equal(resolved.getPage, explicit.getActivePage);
+  assert.equal(typeof resolved.getBrowserInstance, 'function');
+  assert.equal(typeof resolved.writeArtifact, 'function');
+  assert.equal(typeof resolved.clearHandoff, 'function');
+});
+
+test('entry returns a gateway response with strategy metadata', async () => {
   const calls = [];
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
   const state = { pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false }, handoff: { state: 'idle' } };
@@ -45,6 +64,19 @@ test('entry returns a gateway response with strategy metadata', async () => {
   assert.equal(result.meta.page.url, 'https://example.com');
   assert.equal(result.meta.continuation.suggested_next_action, 'inspect');
   assert.equal(result.meta.agent_boundary.key, 'public_read');
+  assert.deepEqual(result.meta.runtime_state, {
+    goal: 'Read the current page on the active route and extract useful content.',
+    current_boundary: 'public_read',
+    redlines: ['page-changing actions', 'form_runtime tools', 'workspace_runtime tools'],
+    evidence_anchor: {
+      route_mode: 'public_read',
+      page_role: 'content',
+      url: 'https://example.com',
+      handoff_state: 'idle',
+      instance_display: null,
+    },
+    next_gap: 'Need fresh readable-page evidence before deeper actions.',
+  });
   assert.equal(receivedArgs.deps.auditName, 'entry');
 });
 
@@ -64,6 +96,29 @@ test('entry marks low-trust preheat outcomes as warmup', async () => {
   assert.equal(result.meta.status, 'warmup');
   assert.equal(result.meta.continuation.can_continue, true);
   assert.equal(result.meta.continuation.suggested_next_action, 'preheat_session');
+});
+
+test('entry reports the resolved final url instead of echoing the requested target url', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = { pageState: { currentRole: 'content', graspConfidence: 'medium', riskGateDetected: false }, handoff: { state: 'idle' } };
+
+  registerGatewayTools(server, state, {
+    enterWithStrategy: async () => ({
+      url: 'https://www.zhipin.com/',
+      final_url: 'https://www.zhipin.com/zhengzhou/?seoRefer=index',
+      title: 'BOSS直聘',
+      preflight: { session_trust: 'medium', recommended_entry_strategy: 'direct' },
+      pageState: state.pageState,
+      verified: false,
+    }),
+    getBrowserInstance: async () => null,
+  });
+
+  const entry = calls.find((tool) => tool.name === 'entry');
+  const result = await entry.handler({ url: 'https://www.zhipin.com/', intent: 'extract' });
+
+  assert.equal(result.meta.page.url, 'https://www.zhipin.com/zhengzhou/?seoRefer=index');
 });
 
 test('entry marks handoff or preheat outcomes as gated', async () => {
@@ -96,8 +151,17 @@ test('entry ignores stale handoff state after a verified direct public entry', a
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
   const state = {
     pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false },
-    handoff: { state: 'idle' },
+    handoff: {
+      state: 'awaiting_reacquisition',
+      expected_url_contains: 'github.com',
+      continuation_goal: 'resume_private_session',
+    },
   };
+  const persisted = [];
+  const page = createFakePage({
+    url: () => 'https://example.com',
+    title: () => 'Example',
+  });
 
   registerGatewayTools(server, state, {
     enterWithStrategy: async () => ({
@@ -109,16 +173,36 @@ test('entry ignores stale handoff state after a verified direct public entry', a
       verified: true,
       final_url: 'https://example.com',
     }),
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = {
+        currentRole: 'content',
+        graspConfidence: 'high',
+        riskGateDetected: false,
+      };
+      return currentState;
+    },
+    writeHandoffState: async (snapshot) => {
+      persisted.push(snapshot);
+    },
     getBrowserInstance: async () => null,
   });
 
   const entry = calls.find((tool) => tool.name === 'entry');
+  const inspect = calls.find((tool) => tool.name === 'inspect');
   const result = await entry.handler({ url: 'https://example.com', intent: 'extract' });
+  const inspectResult = await inspect.handler();
 
   assert.equal(result.meta.status, 'direct');
   assert.equal(result.meta.agent_boundary.key, 'public_read');
   assert.equal(result.meta.route.selected_mode, 'public_read');
   assert.equal(result.meta.continuation.suggested_next_action, 'extract');
+  assert.equal(state.handoff.state, 'idle');
+  assert.equal(state.handoff.expected_url_contains, null);
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].state, 'idle');
+  assert.equal(inspectResult.meta.status, 'direct');
+  assert.equal(inspectResult.meta.continuation.suggested_next_action, 'extract');
 });
 
 test('entry ignores stale handoff state after a verified direct form entry', async () => {
@@ -151,6 +235,35 @@ test('entry ignores stale handoff state after a verified direct form entry', asy
   assert.equal(result.meta.continuation.suggested_next_action, 'form_inspect');
 });
 
+test('entry keeps public navigation-heavy pages on extract instead of workspace continuation', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = {
+    pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false, workspaceSurface: null },
+    handoff: { state: 'idle' },
+  };
+
+  registerGatewayTools(server, state, {
+    enterWithStrategy: async () => ({
+      url: 'https://github.com/vercel/next.js',
+      title: 'GitHub - vercel/next.js',
+      preflight: { session_trust: 'low', recommended_entry_strategy: 'preheat_before_direct_entry' },
+      pageState: { currentRole: 'navigation-heavy', workspaceSurface: 'list', graspConfidence: 'high', riskGateDetected: false },
+      handoff: { state: 'idle' },
+      verified: true,
+      final_url: 'https://github.com/vercel/next.js',
+    }),
+    getBrowserInstance: async () => null,
+  });
+
+  const entry = calls.find((tool) => tool.name === 'entry');
+  const result = await entry.handler({ url: 'https://github.com/vercel/next.js', intent: 'extract' });
+
+  assert.equal(result.meta.route.selected_mode, 'public_read');
+  assert.equal(result.meta.agent_boundary.key, 'public_read');
+  assert.equal(result.meta.continuation.suggested_next_action, 'extract');
+});
+
 test('inspect returns current gateway page status without raw primitive wording', async () => {
   const calls = [];
   const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
@@ -175,6 +288,41 @@ test('inspect returns current gateway page status without raw primitive wording'
   assert.equal(result.meta.page.page_role, 'content');
   assert.equal(result.meta.continuation.suggested_next_action, 'extract');
   assert.doesNotMatch(result.content[0].text, /page_role|handoff_state|suggested_next_action/);
+});
+
+test('inspect tolerates transient page.title failures after a redirecting runtime navigation', async () => {
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  let titleReads = 0;
+  const page = createFakePage({
+    url: () => 'https://www.zhipin.com/zhengzhou/?seoRefer=index',
+    title: async () => {
+      titleReads += 1;
+      if (titleReads === 1) {
+        throw new Error('Execution context was destroyed, most likely because of a navigation');
+      }
+      return 'BOSS直聘';
+    },
+  });
+  const state = {
+    pageState: { currentRole: 'content', graspConfidence: 'high', riskGateDetected: false },
+    handoff: { state: 'idle' },
+  };
+
+  registerGatewayTools(server, state, {
+    getActivePage: async () => page,
+    syncPageState: async (_page, currentState) => {
+      currentState.pageState = state.pageState;
+      return currentState;
+    },
+  });
+
+  const inspect = calls.find((tool) => tool.name === 'inspect');
+  const result = await inspect.handler();
+
+  assert.equal(result.meta.status, 'direct');
+  assert.equal(result.meta.page.title, 'BOSS直聘');
+  assert.equal(titleReads, 2);
 });
 
 test('inspect reports runtime instance identity when available', async () => {

@@ -2,14 +2,23 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.6.6-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.7-0B1738?style=flat-square)](./CHANGELOG.md)
+
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
-[![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.md#quickstart)
+
+[![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor%20%7C%20Alma-5B6CFF?style=flat-square)](./README.md#quickstart)
+
+
 > **Grasp is a route-aware AI Browser Runtime for agents. One URL, one best path.**
 
-Grasp runs locally, keeps a dedicated `chrome-grasp` profile, and gives agents a persistent, human-visible, recoverable web runtime instead of disposable tabs and one-off scripts. That dedicated profile is Grasp's runtime boundary, not "whatever local browser window the user happens to have open right now." The product promise in `v0.6.6` is simple: given a URL and an intent, Grasp should choose the best path first, keep that decision explainable, require confirmed runtime context before page-changing actions, continue on the same runtime path, surface the active route boundary directly in high-level tool responses, refuse high-level form/workspace actions when the current surface boundary does not match, and attach a route/surface-aware prompt package agents can actually execute against.
 
-- Current package release: `v0.6.6`
+
+Grasp runs locally, keeps a dedicated `chrome-grasp` profile, and gives agents a persistent, human-visible, recoverable web runtime instead of disposable tabs and one-off scripts. That dedicated profile is Grasp's runtime boundary, not "whatever local browser window the user happens to have open right now." The product promise in `v0.6.7` is simple: given a URL and an intent, Grasp should choose the best path first, keep that decision explainable, require confirmed runtime context before page-changing actions, continue on the same runtime path, surface the active route boundary directly in high-level tool responses, refuse high-level form/workspace actions when the current surface boundary does not match, and attach a route/surface-aware prompt package agents can actually execute against.
+
+
+
+- Current package release: `v0.6.7`
+
 - Start here: [Browser Runtime Landing](./docs/browser-runtime-landing.html)
 - Public docs for the runtime surface: [docs/README.md](./docs/README.md)
 - Release notes: [CHANGELOG.md](./CHANGELOG.md)
@@ -74,7 +83,7 @@ What it does not claim:
 npx -y @yuzc-001/grasp
 ```
 
-This detects Chrome, launches the dedicated `chrome-grasp` profile, and helps you connect your AI client.
+This detects Chrome or Edge, launches the dedicated `chrome-grasp` profile, verifies a visible browser runtime, and helps you connect your AI client.
 
 By default this connects Grasp's own CDP runtime. Unless you explicitly point it at a different CDP endpoint, it is not claiming control over an arbitrary browser session the user is currently viewing.
 

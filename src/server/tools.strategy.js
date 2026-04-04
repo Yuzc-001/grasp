@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getActivePage, navigateTo, pinTargetPage, trustedContextOpen } from '../layer1-bridge/chrome.js';
+import { getActivePage, navigateTo, pinTargetPage, readStablePageTitle, trustedContextOpen } from '../layer1-bridge/chrome.js';
 import { textResponse } from './responses.js';
 import { syncPageState } from './state.js';
 import { audit } from './audit.js';
@@ -68,7 +68,7 @@ export async function enterWithStrategy({ url, state, deps = {} }) {
 
   return {
     url,
-    title: page ? await page.title() : null,
+    title: page ? await readStablePageTitle(page) : null,
     preflight,
     pageState: state.pageState ?? pageState,
     handoff,
@@ -107,7 +107,7 @@ export function registerStrategyTools(server, state, deps = {}) {
 
       return textResponse([
         `Preheated host: ${origin}`,
-        `Current page: ${await page.title()}`,
+        `Current page: ${await readStablePageTitle(page) ?? 'unknown'}`,
         `Page role: ${state.pageState?.currentRole ?? 'unknown'}`,
         `Risk gate detected: ${state.pageState?.riskGateDetected ? 'yes' : 'no'}`,
         `Suggested next action: ${state.pageState?.suggestedNextAction ?? 'none'}`,
@@ -152,7 +152,7 @@ export function registerStrategyTools(server, state, deps = {}) {
         `Navigation strategy: ${preflight.recommended_entry_strategy}`,
         `Session trust: ${preflight.session_trust}`,
         `Navigated to: ${url}`,
-        `Page title: ${outcome.title}`,
+        `Page title: ${outcome.title ?? 'unknown'}`,
         `Entry method: ${outcome.entry_method ?? 'unknown'}`,
         `Verified: ${outcome.verified ? 'yes' : 'no'}`,
         extra,

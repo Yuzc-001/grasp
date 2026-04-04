@@ -93,6 +93,52 @@ function clearTargetSession(state) {
   }
 }
 
+function isInternalBrowserUrl(url = '') {
+  return url.startsWith('chrome://')
+    || url.startsWith('chrome-extension://')
+    || url.startsWith('about:');
+}
+
+function isTransientExecutionContextError(error) {
+  const message = error?.message ?? '';
+  return message.includes('Execution context was destroyed')
+    || message.includes('Cannot find context with specified id');
+}
+
+function getUrlHost(url = '') {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+async function safeReadPageTitle(page, { attempts = 3, delayMs = 120 } = {}) {
+  let lastError = null;
+
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      return await page.title();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientExecutionContextError(error) || index === attempts - 1) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (index + 1)));
+    }
+  }
+
+  if (lastError && !isTransientExecutionContextError(lastError)) {
+    throw lastError;
+  }
+
+  return null;
+}
+
+export async function readStablePageTitle(page, options = {}) {
+  return safeReadPageTitle(page, options);
+}
+
 function getPinnedTargetSession(state) {
   const activeTaskFrame = getActiveTaskFrame(state);
   if (activeTaskFrame) {
@@ -118,19 +164,29 @@ function isPinnedTargetAvailable(page, browser) {
 
 function matchesPinnedTarget(page, targetSession) {
   const currentUrl = page?.url?.() ?? '';
-  if (!currentUrl || !targetSession?.url) return false;
-  if (currentUrl !== targetSession.url) return false;
-  if (currentUrl.startsWith('chrome://')) return false;
-  if (currentUrl.startsWith('chrome-extension://')) return false;
-  if (currentUrl.startsWith('about:')) return false;
-  return true;
+  if (!currentUrl) return false;
+  if (isInternalBrowserUrl(currentUrl)) return false;
+
+  const targetHost = targetSession?.host ?? getUrlHost(targetSession?.url ?? '');
+  const currentHost = getUrlHost(currentUrl);
+  if (targetHost && currentHost && targetHost === currentHost) {
+    return true;
+  }
+
+  if (targetSession?.url && currentUrl === targetSession.url) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function pinTargetPage(page, state) {
+  const currentUrl = page.url();
   const targetSession = {
     page,
-    url: page.url(),
-    title: await page.title(),
+    url: currentUrl,
+    host: getUrlHost(currentUrl),
+    title: await safeReadPageTitle(page),
   };
   if (state) {
     const activeTaskFrame = getActiveTaskFrame(state);
@@ -310,9 +366,7 @@ async function getActivePage({ state = null, browser = null } = {}) {
   const userPages = pages.filter((page) => {
     const url = page.url();
     if (!url) return false;
-    if (url.startsWith('chrome://')) return false;
-    if (url.startsWith('chrome-extension://')) return false;
-    if (url.startsWith('about:')) return false;
+    if (isInternalBrowserUrl(url)) return false;
     return true;
   });
 

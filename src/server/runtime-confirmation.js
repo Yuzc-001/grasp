@@ -4,9 +4,9 @@ const INSTANCE_CONFIRMATION_ERROR = 'INSTANCE_CONFIRMATION_REQUIRED';
 
 function buildInstanceKey(instance = {}) {
   return [
-    instance.display ?? 'unknown',
-    instance.browser ?? 'unknown',
-    instance.protocolVersion ?? 'unknown',
+    instance?.display ?? 'unknown',
+    instance?.browser ?? 'unknown',
+    instance?.protocolVersion ?? 'unknown',
   ].join('|');
 }
 
@@ -21,6 +21,10 @@ export function isRuntimeInstanceConfirmed(state, instance) {
 }
 
 export function storeRuntimeConfirmation(state, instance) {
+  if (!state || !instance) {
+    return null;
+  }
+
   const confirmation = {
     instance_key: buildInstanceKey(instance),
     display: instance?.display ?? 'unknown',

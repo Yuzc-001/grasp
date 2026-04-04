@@ -1,6 +1,6 @@
 {
   "name": "@yuzc-001/grasp",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "Visible AI browser runtime with persistent sessions, verified actions, structured extraction, and recoverable handoff.",
   "main": "index.js",
   "bin": {
@@ -19,6 +19,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "qa:business": "node scripts/run-business-qa.mjs",
     "test": "node --test",
     "test:watch": "node --test --watch"
   },

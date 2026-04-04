@@ -1,20 +1,67 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+
   resolveLiveItem,
+
   resolveComposer,
+
   createWorkspaceWriteEvidence,
+
   executeGuardedAction,
+
   selectWorkspaceItem,
+
   selectItemByHint,
+
   draftWorkspaceAction,
+
   draftIntoComposer,
+
   executeWorkspaceAction,
+
   verifyActionOutcome,
+
 } from '../../src/server/workspace-runtime.js';
+
+import {
+
+  getWorkspaceExecuteSignals,
+
+  canExecuteWorkspaceSend,
+
+  normalizeWorkspaceSnapshot,
+
+} from '../../src/server/workspace-runtime.seams.js';
+
 import { createFakePage } from '../helpers/fake-page.js';
 
-test('resolveLiveItem matches by normalized label and returns ambiguity when needed', async () => {
+test('workspace runtime seam helpers expose execution readiness and snapshot normalization', async () => {
+  const snapshot = {
+    live_items: [],
+    composer: { kind: 'chat_composer', draft_present: true },
+    action_controls: [{ label: '发送', action_kind: 'send', hint_id: 'B1' }],
+    blocking_modals: [],
+    loading_shell: false,
+    workspace_surface: 'thread',
+    summary: {
+      draft_present: true,
+      outcome_signals: { active_item_stable: true },
+    },
+  };
+
+  const signals = getWorkspaceExecuteSignals(snapshot);
+  const normalized = normalizeWorkspaceSnapshot(snapshot);
+
+  assert.equal(signals.loadingShell, false);
+  assert.equal(signals.blockingModalCount, 0);
+  assert.equal(Boolean(signals.sendControl), true);
+  assert.equal(canExecuteWorkspaceSend(snapshot), true);
+  assert.equal(normalized.workspace_surface, 'thread');
+  assert.equal(typeof normalized.summary_text, 'string');
+});
+
+test('resolveLiveItem matches by normalized label and returns ambiguity when needed', async () => {
   const exact = await resolveLiveItem({
     live_items: [
       { label: '李女士', normalized_label: '李女士', hint_id: 'L1' },

@@ -1,8 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 const DEFAULT_ARTIFACT_DIR = path.join(os.homedir(), '.grasp', 'artifacts');
+
+export function getDefaultArtifactDir() {
+  return DEFAULT_ARTIFACT_DIR;
+}
 
 function toSafeText(value) {
   return String(value ?? '').trim();
@@ -281,4 +286,29 @@ export async function writeArtifactFile(artifact, deps = {}) {
       : Buffer.byteLength(String(artifact.data), artifact.encoding === 'utf8' ? 'utf8' : undefined),
     mimeType: artifact.mimeType ?? null,
   };
+}
+
+export async function listArtifactFiles({ artifactDir = DEFAULT_ARTIFACT_DIR, limit = 20 } = {}) {
+  try {
+    const names = await readdir(artifactDir);
+    const entries = [];
+
+    for (const name of names) {
+      const fullPath = path.join(artifactDir, name);
+      const info = await stat(fullPath);
+      if (!info.isFile()) continue;
+      entries.push({
+        name,
+        path: fullPath,
+        bytes: info.size,
+        updated_at: info.mtime.toISOString(),
+      });
+    }
+
+    return entries
+      .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
 }

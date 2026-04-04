@@ -1,14 +1,69 @@
 import { z } from 'zod';
 
-import { buildGatewayResponse } from './gateway-response.js';
 import { guardExpectedBoundary } from './boundary-guard.js';
+
 import { getActivePage } from '../layer1-bridge/chrome.js';
 import { clickByHintId } from '../layer3-action/actions.js';
 import { syncPageState } from './state.js';
-import { buildWorkspaceVerification, collectVisibleWorkspaceSnapshot, getWorkspaceContinuation, getWorkspaceStatus, summarizeWorkspaceSnapshot } from './workspace-tasks.js';
+import { buildWorkspaceVerification, collectVisibleWorkspaceSnapshot, getWorkspaceContinuation, getWorkspaceStatus } from './workspace-tasks.js';
+
 import { draftWorkspaceAction, executeWorkspaceAction, selectWorkspaceItem } from './workspace-runtime.js';
+
+import {
+
+
+
+  buildWorkspaceSnapshotView,
+
+
+
+  getWorkspaceNextAction,
+
+
+
+  toPublicActiveItem,
+
+
+  toPublicDraftEvidence,
+
+  toPublicDraftFailure,
+
+  toPublicDraftUnresolved,
+
+  toPublicExecuteFailure,
+
+  toPublicExecuteUnresolved,
+
+  toPublicExecuteVerification,
+
+  toPublicSelectionEvidence,
+
+  toPublicSelectionItem,
+
+  toPublicSelectionUnresolved,
+
+} from './tools.workspace.view.js';
+
 import { readBrowserInstance } from '../runtime/browser-instance.js';
+
 import { requireConfirmedRuntimeInstance } from './runtime-confirmation.js';
+
+import {
+
+  buildWorkspaceDraftResponse,
+
+  buildWorkspaceExecuteResponse,
+
+  buildWorkspaceSelectionResponse,
+
+  buildWorkspaceToolResponse,
+
+  buildWorkspaceResultSummary,
+
+} from './tools.workspace.response.js';
+
+
+
 
 const WORKSPACE_ITEM_SELECTOR = 'li, [role="option"], [role="row"], [role="treeitem"], [data-list-item], [data-thread-item], [data-conversation-item]';
 
@@ -32,306 +87,6 @@ function getWorkspaceBoundaryGuard(state, toolName, pageInfo) {
   });
 }
 
-function pick(snapshot, camelKey, snakeKey, fallback = null) {
-  if (snapshot?.[camelKey] !== undefined) return snapshot[camelKey];
-  if (snapshot?.[snakeKey] !== undefined) return snapshot[snakeKey];
-  return fallback;
-}
-
-function getLiveItems(snapshot) {
-  const items = pick(snapshot, 'liveItems', 'live_items', []);
-  return Array.isArray(items) ? items : [];
-}
-
-function getComposer(snapshot) {
-  const composer = pick(snapshot, 'composer', 'composer', null);
-  return composer && typeof composer === 'object' ? composer : null;
-}
-
-function getActionControls(snapshot) {
-  const controls = pick(snapshot, 'actionControls', 'action_controls', []);
-  return Array.isArray(controls) ? controls : [];
-}
-
-function getBlockingModals(snapshot) {
-  const modals = pick(snapshot, 'blockingModals', 'blocking_modals', []);
-  return Array.isArray(modals) ? modals : [];
-}
-
-function getLoadingShell(snapshot) {
-  return pick(snapshot, 'loadingShell', 'loading_shell', false) === true;
-}
-
-function getActiveItem(snapshot) {
-  const activeItem = pick(snapshot, 'activeItem', 'active_item', null);
-  if (activeItem) {
-    return activeItem;
-  }
-
-  const summaryLabel = String(snapshot?.summary?.active_item_label ?? '').replace(/\s+/g, ' ').trim();
-  if (summaryLabel) {
-    return { label: summaryLabel };
-  }
-
-  const selectedLiveItem = getLiveItems(snapshot).find((item) => item?.selected === true);
-  if (selectedLiveItem?.label) {
-    return { label: String(selectedLiveItem.label).replace(/\s+/g, ' ').trim() };
-  }
-
-  return null;
-}
-
-function getSendLikeActionControls(snapshot) {
-  return getActionControls(snapshot).filter((control) => control?.action_kind === 'send');
-}
-
-function isActiveItemStable(snapshot, summary) {
-  if (summary?.outcome_signals?.active_item_stable === true) {
-    return true;
-  }
-
-  if (summary?.active_item_stable === true) {
-    return true;
-  }
-
-  return false;
-}
-
-function toPublicLiveItem(item) {
-  return {
-    label: String(item?.label ?? '').replace(/\s+/g, ' ').trim(),
-    selected: item?.selected === true,
-  };
-}
-
-function toPublicActiveItem(item) {
-  if (!item) return null;
-  return {
-    label: String(item?.label ?? '').replace(/\s+/g, ' ').trim(),
-  };
-}
-
-function toPublicComposer(composer) {
-  if (!composer) return null;
-  return {
-    kind: composer.kind ?? 'chat_composer',
-    draft_present: composer?.draft_present === true,
-  };
-}
-
-function toPublicActionControl(control) {
-  return {
-    label: String(control?.label ?? '').replace(/\s+/g, ' ').trim(),
-    action_kind: control?.action_kind ?? 'action',
-  };
-}
-
-function toPublicBlockingModal(modal) {
-  return {
-    label: String(modal?.label ?? '').replace(/\s+/g, ' ').trim(),
-  };
-}
-
-function toPublicSelectionItem(item, selected = item?.selected === true) {
-  if (!item) return null;
-  return {
-    label: String(item?.label ?? '').replace(/\s+/g, ' ').trim(),
-    selected: selected === true,
-  };
-}
-
-function toPublicSelectionEvidence(evidence, selected = false) {
-  if (!evidence) return null;
-
-  return {
-    requested_label: String(evidence?.requested_label ?? '').replace(/\s+/g, ' ').trim(),
-    selected_item: toPublicSelectionItem(evidence?.selected_item, selected),
-    active_item: toPublicActiveItem(evidence?.active_item),
-    detail_alignment: evidence?.detail_alignment ?? 'unknown',
-    selection_window: evidence?.selection_window ?? 'not_found',
-    recovery_hint: evidence?.recovery_hint ?? null,
-    match_count: evidence?.match_count ?? 0,
-    summary: evidence?.summary ?? 'unknown',
-  };
-}
-
-function toPublicSelectionUnresolved(unresolved) {
-  if (!unresolved) return null;
-
-  return {
-    reason: unresolved.reason ?? 'unknown',
-    requested_label: String(unresolved.requested_label ?? '').replace(/\s+/g, ' ').trim(),
-    recovery_hint: unresolved.recovery_hint ?? null,
-  };
-}
-
-function toPublicDraftEvidence(draftEvidence) {
-  if (!draftEvidence) return null;
-
-  return {
-    kind: draftEvidence.kind ?? 'draft_action',
-    target: draftEvidence.target ?? 'chat_composer',
-    autosave_possible: draftEvidence.autosave_possible === true,
-    write_side_effect: draftEvidence.write_side_effect ?? 'draft_mutation_possible',
-    draft_present: draftEvidence.draft_present === true,
-    summary: draftEvidence.summary ?? null,
-  };
-}
-
-function toPublicDraftUnresolved(unresolved) {
-  if (!unresolved) return null;
-
-  return {
-    reason: unresolved.reason ?? 'unknown',
-    requested_label: String(unresolved.requested_label ?? '').replace(/\s+/g, ' ').trim(),
-    recovery_hint: unresolved.recovery_hint ?? null,
-  };
-}
-
-function toPublicDraftFailure(result) {
-  const errorCode = result?.error_code ?? null;
-  const retryable = result?.retryable;
-  const suggestedNextStep = result?.suggested_next_step ?? null;
-
-  if (!errorCode && retryable === undefined && suggestedNextStep == null) {
-    return null;
-  }
-
-  return {
-    error_code: errorCode,
-    retryable: retryable ?? null,
-    suggested_next_step: suggestedNextStep,
-  };
-}
-
-function toPublicExecuteUnresolved(unresolved) {
-  if (!unresolved) return null;
-
-  return {
-    reason: unresolved.reason ?? 'unknown',
-    requested_label: String(unresolved.requested_label ?? '').replace(/\s+/g, ' ').trim(),
-    recovery_hint: unresolved.recovery_hint ?? null,
-  };
-}
-
-function toPublicExecuteFailure(failure) {
-  if (!failure) return null;
-
-  return {
-    error_code: failure.error_code ?? null,
-    retryable: failure.retryable ?? null,
-    suggested_next_step: failure.suggested_next_step ?? null,
-  };
-}
-
-function toPublicExecuteVerification(verification) {
-  if (!verification) return null;
-
-  return {
-    delivered: verification.delivered === true,
-    composer_cleared: verification.composer_cleared === true,
-    active_item_stable: verification.active_item_stable === true,
-  };
-}
-
-function toPublicWorkspaceSummary(summary, snapshot) {
-  const blockingModalLabels = Array.isArray(summary?.blocking_modal_labels)
-    ? summary.blocking_modal_labels
-    : getBlockingModals(snapshot)
-        .map((modal) => String(modal?.label ?? '').replace(/\s+/g, ' ').trim())
-        .filter(Boolean);
-
-  return {
-    active_item_label: summary?.active_item_label ?? null,
-    draft_present: summary?.draft_present === true,
-    loading_shell: summary?.loading_shell === true,
-    blocking_modal_count: summary?.blocking_modal_count ?? blockingModalLabels.length,
-    blocking_modal_labels: blockingModalLabels,
-    detail_alignment: summary?.detail_alignment ?? 'unknown',
-    selection_window: summary?.selection_window ?? 'not_found',
-    recovery_hint: summary?.recovery_hint ?? null,
-    summary: summary?.summary ?? 'unknown',
-  };
-}
-
-function formatWorkspaceSurfaceLabel(workspaceSurface) {
-  return String(workspaceSurface ?? 'unknown')
-    .replace(/_/g, ' ')
-    .trim();
-}
-
-function getWorkspaceSummaryLabel(workspace, workspaceSummary) {
-  const activeLabel = String(
-    workspaceSummary?.active_item_label
-      ?? workspace?.active_item?.label
-      ?? workspace?.live_items?.find((item) => item?.selected === true)?.label
-      ?? ''
-  ).replace(/\s+/g, ' ').trim();
-
-  return activeLabel || 'no active item';
-}
-
-function formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary) {
-  return `Workspace ${formatWorkspaceSurfaceLabel(workspaceSurface)} • ${getWorkspaceSummaryLabel(workspace, workspaceSummary)}`;
-}
-
-function getWorkspaceNextAction(snapshot) {
-  const summary = pick(snapshot, 'summary', 'summary', null);
-  const loadingShell = getLoadingShell(snapshot) || summary?.loading_shell === true;
-  if (loadingShell) {
-    return 'workspace_inspect';
-  }
-
-  const blockingModals = getBlockingModals(snapshot);
-  if (blockingModals.length > 0) {
-    return 'workspace_inspect';
-  }
-
-  const liveItems = getLiveItems(snapshot);
-  const activeItem = getActiveItem(snapshot);
-  const composer = getComposer(snapshot);
-  const activeItemStable = isActiveItemStable(snapshot, summary);
-  const draftPresent = composer?.draft_present === true || summary?.draft_present === true;
-  const sendLikeControls = getSendLikeActionControls(snapshot);
-
-  if (!activeItem && liveItems.length > 0) {
-    return 'select_live_item';
-  }
-
-  if (composer && activeItemStable && draftPresent && sendLikeControls.length > 0) {
-    return 'execute_action';
-  }
-
-  if (composer && activeItemStable) {
-    return 'draft_action';
-  }
-
-  if (liveItems.length > 0) {
-    return 'select_live_item';
-  }
-
-  return 'workspace_inspect';
-}
-
-function buildWorkspaceSnapshotView(snapshot) {
-  const workspaceSummary = summarizeWorkspaceSnapshot(snapshot);
-  const workspaceSurface = snapshot.workspace_surface ?? snapshot.workspaceSurface ?? workspaceSummary.workspace_surface;
-
-  return {
-    workspaceSummary: toPublicWorkspaceSummary(workspaceSummary, snapshot),
-    workspaceSurface,
-    workspace: {
-      workspace_surface: workspaceSurface,
-      live_items: getLiveItems(snapshot).map(toPublicLiveItem),
-      active_item: toPublicActiveItem(getActiveItem(snapshot)),
-      composer: toPublicComposer(getComposer(snapshot)),
-      action_controls: getActionControls(snapshot).map(toPublicActionControl),
-      blocking_modals: getBlockingModals(snapshot).map(toPublicBlockingModal),
-      loading_shell: getLoadingShell(snapshot),
-      summary: toPublicWorkspaceSummary(workspaceSummary, snapshot),
-    },
-  };
-}
 
 function createWorkspaceRebuildHints(page, state, syncState) {
   return async () => {
@@ -430,26 +185,38 @@ function registerWorkspaceActionTool(server, state, deps, toolName, actionKind) 
         });
       }
 
-      return buildGatewayResponse({
+      return buildWorkspaceToolResponse({
+
         status,
+
         page: toGatewayPage(pageInfo, state),
+
         result: {
+
           task_kind: 'workspace',
+
           action: {
+
             kind: actionKind,
+
             status: status === 'direct' ? (delegated ? 'delegated' : 'unimplemented') : 'blocked',
+
           },
+
           workspace,
-          summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
+
+          summary: buildWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
+
         },
+
         continuation: getWorkspaceContinuation(state, continuationAction),
-        evidence: {
-          workspace_surface: workspaceSurface,
-          active_item_label: workspaceSummary.active_item_label ?? null,
-          loading_shell: workspaceSummary.loading_shell ?? false,
-          blocking_modal_count: workspaceSummary.blocking_modal_count ?? 0,
-        },
+
+        workspaceSurface,
+
+        workspaceSummary,
+
       });
+
     }
   );
 }
@@ -487,31 +254,32 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
       const continuationAction = status === 'direct' ? 'workspace_inspect' : 'request_handoff';
 
       if (status !== 'direct') {
-        return buildGatewayResponse({
+        return buildWorkspaceDraftResponse({
+
           status,
+
           page: toGatewayPage(pageInfo, state),
-        result: {
-          task_kind: 'workspace',
-          status: 'blocked',
-          draft_evidence: null,
-          unresolved: null,
-          failure: null,
-          action: {
-            kind: 'draft_action',
-            status: 'blocked',
-          },
-          snapshot: workspace,
-            workspace,
-            summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
-          },
+
           continuation: getWorkspaceContinuation(state, continuationAction),
-          evidence: {
-            workspace_surface: workspaceSurface,
-            active_item_label: workspaceSummary.active_item_label ?? null,
-            loading_shell: workspaceSummary.loading_shell ?? false,
-            blocking_modal_count: workspaceSummary.blocking_modal_count ?? 0,
-          },
+
+          workspaceSurface,
+
+          workspaceSummary,
+
+          workspace,
+
+          runtime: instance ? { instance } : undefined,
+
+          resultStatus: 'blocked',
+
+          draftEvidence: null,
+
+          unresolved: null,
+
+          failure: null,
+
         });
+
       }
 
       const draftResult = await draftAction({
@@ -534,33 +302,32 @@ function registerWorkspaceDraftActionTool(server, state, deps) {
       const publicFailure = toPublicDraftFailure(draftResult);
       const publicSnapshot = refreshedView.workspace;
 
-      return buildGatewayResponse({
+      return buildWorkspaceDraftResponse({
+
         status,
+
         page: toGatewayPage(pageInfoAfter, state),
-        result: {
-          task_kind: 'workspace',
-          status: draftResult.status ?? 'unresolved',
-          draft_evidence: publicDraftEvidence,
-          unresolved: publicUnresolved,
-          failure: publicFailure,
-          action: {
-            kind: 'draft_action',
-            status: draftResult.status ?? 'unresolved',
-          },
-          snapshot: publicSnapshot,
-          workspace: publicSnapshot,
-          summary: formatWorkspaceResultSummary(refreshedView.workspaceSurface, publicSnapshot, refreshedView.workspaceSummary),
-        },
+
         continuation: getWorkspaceContinuation(state, 'workspace_inspect'),
-        evidence: {
-          workspace_surface: refreshedView.workspaceSurface,
-          active_item_label: refreshedView.workspaceSummary.active_item_label ?? null,
-          loading_shell: refreshedView.workspaceSummary.loading_shell ?? false,
-          blocking_modal_count: refreshedView.workspaceSummary.blocking_modal_count ?? 0,
-          draft_evidence: publicDraftEvidence,
-          failure: publicFailure,
-        },
+
+        workspaceSurface: refreshedView.workspaceSurface,
+
+        workspaceSummary: refreshedView.workspaceSummary,
+
+        workspace: publicSnapshot,
+
+        runtime: instance ? { instance } : undefined,
+
+        resultStatus: draftResult.status ?? 'unresolved',
+
+        draftEvidence: publicDraftEvidence,
+
+        unresolved: publicUnresolved,
+
+        failure: publicFailure,
+
       });
+
     }
   );
 }
@@ -622,39 +389,32 @@ function registerWorkspaceExecuteActionTool(server, state, deps) {
         url: page.url(),
       };
 
-      return buildGatewayResponse({
+      return buildWorkspaceExecuteResponse({
+
         status: finalStatus,
+
         page: toGatewayPage(pageInfoAfter, state),
-        result: {
-          task_kind: 'workspace',
-          status: executeResult.status ?? 'failed',
-          blocked: executeResult.blocked === true,
-          executed: executeResult.executed === true,
-          reason: executeResult.reason ?? null,
-          unresolved: toPublicExecuteUnresolved(executeResult.unresolved),
-          failure: toPublicExecuteFailure(executeResult.failure),
-          verification: toPublicExecuteVerification(executeResult.verification),
-          action: {
-            kind: 'execute_action',
-            status: executeResult.action?.status ?? (executeResult.status === 'success' ? 'executed' : executeResult.status ?? 'blocked'),
-          },
-          snapshot: finalView.workspace,
-          workspace: finalView.workspace,
-          summary: formatWorkspaceResultSummary(finalView.workspaceSurface, finalView.workspace, finalView.workspaceSummary),
-        },
+
         continuation: getWorkspaceContinuation(state, continuationAction),
-        evidence: {
-          workspace_surface: finalView.workspaceSurface,
-          active_item_label: finalView.workspaceSummary.active_item_label ?? null,
-          loading_shell: finalView.workspaceSummary.loading_shell ?? false,
-          blocking_modal_count: finalView.workspaceSummary.blocking_modal_count ?? 0,
-          blocked: executeResult.blocked === true,
-          executed: executeResult.executed === true,
-          reason: executeResult.reason ?? null,
-          verification: toPublicExecuteVerification(executeResult.verification),
-          failure: toPublicExecuteFailure(executeResult.failure),
-        },
+
+        workspaceSurface: finalView.workspaceSurface,
+
+        workspaceSummary: finalView.workspaceSummary,
+
+        workspace: finalView.workspace,
+
+        runtime: instance ? { instance } : undefined,
+
+        executeResult,
+
+        unresolved: toPublicExecuteUnresolved(executeResult.unresolved),
+
+        failure: toPublicExecuteFailure(executeResult.failure),
+
+        verification: toPublicExecuteVerification(executeResult.verification),
+
       });
+
     }
   );
 }
@@ -663,6 +423,7 @@ function registerWorkspaceVerifyOutcomeTool(server, state, deps) {
   const getPage = deps.getActivePage ?? getActivePage;
   const syncState = deps.syncPageState ?? syncPageState;
   const collectSnapshot = deps.collectVisibleWorkspaceSnapshot ?? collectVisibleWorkspaceSnapshot;
+  const getBrowserInstance = deps.getBrowserInstance ?? (() => readBrowserInstance(process.env.CHROME_CDP_URL || 'http://localhost:9222'));
 
   server.registerTool(
     'verify_outcome',
@@ -673,6 +434,7 @@ function registerWorkspaceVerifyOutcomeTool(server, state, deps) {
     async () => {
       const page = await getPage();
       await syncState(page, state, { force: true });
+      const instance = await getBrowserInstance();
       const pageInfo = {
         title: await page.title(),
         url: page.url(),
@@ -690,24 +452,28 @@ function registerWorkspaceVerifyOutcomeTool(server, state, deps) {
             ...verification,
             ready_for_next_action: 'request_handoff',
           };
-      return buildGatewayResponse({
+      return buildWorkspaceToolResponse({
         status,
         page: toGatewayPage(pageInfo, state),
         result: {
           task_kind: 'workspace',
           verification: publicVerification,
           suggested_next_action: suggestedNextAction,
-          summary: formatWorkspaceResultSummary(workspaceSurface, null, publicVerification),
+          summary: buildWorkspaceResultSummary(workspaceSurface, null, publicVerification),
         },
         continuation: getWorkspaceContinuation(state, suggestedNextAction),
-        evidence: {
-          workspace_surface: workspaceSurface,
+        workspaceSurface,
+        workspaceSummary: {
           active_item_label: publicVerification.active_item_label,
           loading_shell: publicVerification.loading_shell,
+          blocking_modal_count: publicVerification.blocking_modal_present ? 1 : 0,
+        },
+        extraEvidence: {
           blocking_modal_present: publicVerification.blocking_modal_present,
           detail_alignment: publicVerification.detail_alignment,
           ready_for_next_action: publicVerification.ready_for_next_action,
         },
+        runtime: instance ? { instance } : undefined,
       });
     }
   );
@@ -729,6 +495,7 @@ export function registerWorkspaceTools(server, state, deps = {}) {
     async () => {
       const page = await getPage();
       await syncState(page, state, { force: true });
+      const instance = await getBrowserInstance();
       const pageInfo = {
         title: await page.title(),
         url: page.url(),
@@ -738,21 +505,22 @@ export function registerWorkspaceTools(server, state, deps = {}) {
       const snapshot = await collectSnapshot(page, state);
       const { workspace, workspaceSummary, workspaceSurface } = buildWorkspaceSnapshotView(snapshot);
 
-      return buildGatewayResponse({
+      return buildWorkspaceToolResponse({
         status: getWorkspaceStatus(state),
         page: toGatewayPage(pageInfo, state),
         result: {
           task_kind: 'workspace',
           workspace,
-          summary: formatWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
+          summary: buildWorkspaceResultSummary(workspaceSurface, workspace, workspaceSummary),
         },
         continuation: getWorkspaceContinuation(state, getWorkspaceNextAction(snapshot)),
-        evidence: {
-          workspace_surface: workspaceSurface,
-          active_item_label: workspaceSummary.active_item_label ?? null,
-          loading_shell: workspaceSummary.loading_shell ?? getLoadingShell(snapshot),
-          blocking_modal_count: workspaceSummary.blocking_modal_count ?? getBlockingModals(snapshot).length,
+        workspaceSurface,
+        workspaceSummary: {
+          ...workspaceSummary,
+          loading_shell: workspaceSummary.loading_shell ?? workspace.loading_shell,
+          blocking_modal_count: workspaceSummary.blocking_modal_count ?? workspace.blocking_modals.length,
         },
+        runtime: instance ? { instance } : undefined,
       });
     }
   );
@@ -834,37 +602,46 @@ export function registerWorkspaceTools(server, state, deps = {}) {
       const publicSelectionEvidence = toPublicSelectionEvidence(selection.selection_evidence, selection.status === 'selected');
       const publicUnresolved = toPublicSelectionUnresolved(selection.unresolved);
 
-      return buildGatewayResponse({
+      return buildWorkspaceSelectionResponse({
+
         status,
+
         page: toGatewayPage(pageInfoAfter, state),
-        result: {
-          task_kind: 'workspace',
-          status: selection.status,
-          selected_item: publicSelectedItem,
-          active_item: publicActiveItem,
-          detail_alignment: selection.detail_alignment,
-          snapshot: publicSnapshot,
-          selection_evidence: publicSelectionEvidence,
-          unresolved: publicUnresolved,
-          action: {
-            kind: 'select_live_item',
-            status: selection.status,
-          },
-          workspace: publicSnapshot,
-          summary: formatWorkspaceResultSummary(refreshedView.workspaceSurface, publicSnapshot, {
-            ...refreshedView.workspaceSummary,
-            active_item_label: selection.active_item?.label ?? selection.selected_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? null,
-          }),
-        },
+
         continuation: getWorkspaceContinuation(state, 'workspace_inspect'),
-        evidence: {
-          workspace_surface: refreshedView.workspaceSurface,
-          active_item_label: selection.active_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? null,
-          loading_shell: refreshedView.workspaceSummary.loading_shell ?? false,
-          blocking_modal_count: refreshedView.workspaceSummary.blocking_modal_count ?? 0,
-          selection_evidence: publicSelectionEvidence,
+
+        workspaceSurface: refreshedView.workspaceSurface,
+
+        workspaceSummary: refreshedView.workspaceSummary,
+
+        workspace: publicSnapshot,
+
+        runtime: instance ? { instance } : undefined,
+
+        selection,
+
+        selectedItem: publicSelectedItem,
+
+        activeItem: publicActiveItem,
+
+        selectionEvidence: publicSelectionEvidence,
+
+        unresolved: publicUnresolved,
+
+        summaryOverrides: {
+
+          active_item_label: selection.active_item?.label ?? selection.selected_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? null,
+
         },
+
+        extraEvidence: {
+
+          active_item_label: selection.active_item?.label ?? refreshedView.workspaceSummary.active_item_label ?? null,
+
+        },
+
       });
+
     }
   );
   registerWorkspaceDraftActionTool(server, state, toolDeps);

@@ -18,11 +18,39 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
   const result = await page.evaluate(({ registryEntries, counters }) => {
     const reg = new Map(registryEntries);
     const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea']);
+
     const INTERACTIVE_ROLES = new Set([
+
       'button', 'link', 'textbox', 'searchbox', 'combobox',
+
       'checkbox', 'radio', 'menuitem', 'tab', 'option',
+
       'slider', 'spinbutton', 'switch',
+
     ]);
+
+
+
+    function hasNonStandardInteractiveSignals(el, style) {
+
+      const hasClickHandler = typeof el.onclick === 'function' || el.getAttribute('onclick');
+
+      const hasTabIndex = el.hasAttribute('tabindex') && el.getAttribute('tabindex') !== '-1';
+
+      const hasActionData = Array.from(el.getAttributeNames?.() ?? []).some((name) =>
+
+        name.startsWith('data-action') || name.startsWith('data-click') || name.startsWith('data-testid')
+
+      );
+
+      const hasAriaAction = ['aria-expanded', 'aria-haspopup', 'aria-controls', 'aria-pressed'].some((name) => el.hasAttribute(name));
+
+      const pointerCursor = style.cursor === 'pointer';
+
+      return hasClickHandler || hasTabIndex || hasActionData || hasAriaAction || pointerCursor;
+
+    }
+
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -70,17 +98,18 @@ export async function buildHintMap(page, registry = new Map(), counters = { B: 0
       const tag = el.tagName.toLowerCase();
       const role = (el.getAttribute('role') || '').toLowerCase();
 
-      // 2. 只处理 INTERACTIVE_TAGS 或 INTERACTIVE_ROLES 或 contenteditable
-      const isContentEditable = el.getAttribute('contenteditable') === 'true' ||
-                                el.getAttribute('contenteditable') === '';
-      if (!INTERACTIVE_TAGS.has(tag) && !INTERACTIVE_ROLES.has(role) && !isContentEditable) continue;
-
-      // 3. 过滤不可见元素
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      if (rect.bottom < 0 || rect.top > vh || rect.right < 0 || rect.left > vw) continue;
-
-      const style = window.getComputedStyle(el);
+      // 2. 只处理 INTERACTIVE_TAGS 或 INTERACTIVE_ROLES 或 contenteditable 或非标准交互信号
+      const isContentEditable = el.getAttribute('contenteditable') === 'true' ||
+                                el.getAttribute('contenteditable') === '';
+
+      // 3. 过滤不可见元素
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.bottom < 0 || rect.top > vh || rect.right < 0 || rect.left > vw) continue;
+
+      const style = window.getComputedStyle(el);
+      const hasNonStandardSignals = hasNonStandardInteractiveSignals(el, style);
+      if (!INTERACTIVE_TAGS.has(tag) && !INTERACTIVE_ROLES.has(role) && !isContentEditable && !hasNonStandardSignals) continue;
       if (
         style.visibility === 'hidden' ||
         style.display === 'none' ||

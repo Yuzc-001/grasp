@@ -50,41 +50,35 @@ async function measureWithPretext(page, blocks, deps = {}) {
       `,
     });
 
-    return scratchPage.evaluate(async (input) => {
-      return window.__graspPretextMeasure(input);
+    const measured = await scratchPage.evaluate(async (input) => {
+      if (typeof window.__graspPretextMeasure !== 'function') {
+        return { error: 'pretext_helper_missing' };
+      }
+
+      try {
+        return await window.__graspPretextMeasure(input);
+      } catch (error) {
+        return {
+          error: error?.message ?? 'pretext_measure_failed',
+        };
+      }
     }, blocks);
+
+    if (!Array.isArray(measured)) {
+      throw new Error(measured?.error ?? 'pretext_helper_missing');
+    }
+
+    return measured;
   } finally {
     await scratchPage.close?.().catch?.(() => {});
   }
 }
 
-export async function buildExplainShareCard(page, projection, options = {}, deps = {}) {
+function buildShareCardFromMeasured(projection, options = {}, blocks, measured, engine) {
   const width = Number(options.width ?? 640);
   const title = normalizeText(projection?.title, 'Untitled');
   const summary = normalizeText(projection?.summary, projection?.main_text);
   const bodyExcerpt = normalizeText(projection?.main_text).slice(0, 420);
-  const blocks = [
-    { key: 'title', text: title, font: '600 28px Arial', maxWidth: width, lineHeight: 34 },
-    { key: 'summary', text: summary, font: '16px Arial', maxWidth: width, lineHeight: 24 },
-    { key: 'body', text: bodyExcerpt, font: '14px Arial', maxWidth: width, lineHeight: 22, whiteSpace: 'pre-wrap' },
-  ];
-
-  let engine = 'fallback';
-  let measured = blocks.map((block) => ({
-    key: block.key,
-    ...fallbackLayout(block.text, block.maxWidth, block.lineHeight),
-  }));
-
-  try {
-    const nextMeasured = await measureWithPretext(page, blocks, deps);
-    if (Array.isArray(nextMeasured) && nextMeasured.length === blocks.length) {
-      measured = nextMeasured;
-      engine = 'pretext';
-    }
-  } catch {
-    // fall back to deterministic approximation
-  }
-
   const byKey = Object.fromEntries(measured.map((item) => [item.key, item]));
   const estimatedHeight = (byKey.title?.height ?? 0)
     + (byKey.summary?.height ?? 0)
@@ -110,4 +104,54 @@ export async function buildExplainShareCard(page, projection, options = {}, deps
       `Estimated height: ${estimatedHeight}px`,
     ].join('\n'),
   };
+}
+
+function buildShareCardBlocks(projection, options = {}) {
+  const width = Number(options.width ?? 640);
+  const title = normalizeText(projection?.title, 'Untitled');
+  const summary = normalizeText(projection?.summary, projection?.main_text);
+  const bodyExcerpt = normalizeText(projection?.main_text).slice(0, 420);
+
+  return {
+    width,
+    title,
+    summary,
+    bodyExcerpt,
+    blocks: [
+      { key: 'title', text: title, font: '600 28px Arial', maxWidth: width, lineHeight: 34 },
+      { key: 'summary', text: summary, font: '16px Arial', maxWidth: width, lineHeight: 24 },
+      { key: 'body', text: bodyExcerpt, font: '14px Arial', maxWidth: width, lineHeight: 22, whiteSpace: 'pre-wrap' },
+    ],
+  };
+}
+
+export function buildFallbackExplainShareCard(projection, options = {}) {
+  const { blocks } = buildShareCardBlocks(projection, options);
+  const measured = blocks.map((block) => ({
+    key: block.key,
+    ...fallbackLayout(block.text, block.maxWidth, block.lineHeight),
+  }));
+
+  return buildShareCardFromMeasured(projection, options, blocks, measured, 'fallback');
+}
+
+export async function buildExplainShareCard(page, projection, options = {}, deps = {}) {
+  const { blocks } = buildShareCardBlocks(projection, options);
+  let measured = blocks.map((block) => ({
+    key: block.key,
+    ...fallbackLayout(block.text, block.maxWidth, block.lineHeight),
+  }));
+  let engine = 'fallback';
+
+  try {
+    const nextMeasured = await measureWithPretext(page, blocks, deps);
+    if (Array.isArray(nextMeasured) && nextMeasured.length === blocks.length) {
+      measured = nextMeasured;
+      engine = 'pretext';
+    }
+  } catch {
+    // fall back to deterministic approximation
+  }
+
+  return buildShareCardFromMeasured(projection, options, blocks, measured, engine);
 }

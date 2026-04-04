@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 
 import { createFakePage } from '../helpers/fake-page.js';
 
+const confirmedInstance = {
+  browser: 'Chrome/136.0.7103.114',
+  protocolVersion: '1.3',
+  headless: false,
+  display: 'windowed',
+  warning: null,
+};
+
 test('form_inspect returns task_kind form with sections, fields, and ambiguity evidence', async () => {
   const { registerFormTools } = await import('../../src/server/tools.form.js');
   const calls = [];
@@ -14,7 +22,7 @@ test('form_inspect returns task_kind form with sections, fields, and ambiguity e
       url: () => 'https://example.com/form',
       title: () => '简历编辑',
     }),
-    getBrowserInstance: async () => null,
+    getBrowserInstance: async () => confirmedInstance,
     syncPageState: async () => undefined,
     collectVisibleFormSnapshot: async () => ({
       sections: [{ name: '教育经历', field_labels: ['学校名称'] }],
@@ -35,6 +43,8 @@ test('form_inspect returns task_kind form with sections, fields, and ambiguity e
   assert.equal(result.meta.evidence.ambiguous_labels.length, 0);
   assert.equal(result.meta.continuation.suggested_next_action, 'verify_form');
   assert.equal(result.meta.agent_boundary.key, 'form_runtime');
+  assert.equal(result.meta.runtime.instance.display, 'windowed');
+  assert.equal(result.meta.runtime_state.evidence_anchor.instance_display, 'windowed');
   assert.match(result.content[0].text, /Boundary: form_runtime/);
 });
 
@@ -270,6 +280,41 @@ test('set_date and verify_form return refreshed form state and next action', asy
   assert.equal(verifyResult.meta.result.form.submit_controls.length, 1);
   assert.equal(verifyResult.meta.result.form.summary.total, 2);
   assert.equal(verifyResult.meta.continuation.suggested_next_action, 'set_option');
+});
+
+test('verify_form suggests safe_submit when completion is ready and blockers are clear', async () => {
+  const { registerFormTools } = await import('../../src/server/tools.form.js');
+  const calls = [];
+  const server = { registerTool(name, spec, handler) { calls.push({ name, handler }); } };
+  const state = { pageState: { currentRole: 'form', graspConfidence: 'high', riskGateDetected: false }, handoff: { state: 'idle' } };
+
+  registerFormTools(server, state, {
+    getActivePage: async () => createFakePage({
+      url: () => 'https://example.com/form',
+      title: () => '简历编辑',
+    }),
+    getBrowserInstance: async () => confirmedInstance,
+    syncPageState: async () => undefined,
+    collectVisibleFormSnapshot: async () => ({
+      sections: [{ name: '申请信息', field_labels: ['姓名'] }],
+      fields: [
+        { label: '姓名', normalized_label: '姓名', risk_level: 'safe', current_state: 'filled', required: true, type: 'text' },
+      ],
+      submit_controls: [{ label: '提交简历', risk_level: 'sensitive' }],
+      ambiguous_labels: [],
+      completion_status: 'ready',
+      verification: { missing_required: 0, risky_pending: 0, unresolved: 0 },
+      summary: { total: 1, safe: 1, review: 0, sensitive: 0, labels: ['姓名'] },
+    }),
+  });
+
+  const verifyForm = calls.find((tool) => tool.name === 'verify_form');
+  const result = await verifyForm.handler({});
+
+  assert.equal(result.meta.result.form.completion_status, 'ready');
+  assert.equal(result.meta.continuation.suggested_next_action, 'safe_submit');
+  assert.equal(result.meta.runtime.instance.display, 'windowed');
+  assert.equal(result.meta.runtime_state.evidence_anchor.instance_display, 'windowed');
 });
 
 test('safe_submit returns preview verification and only confirms with SUBMIT', async () => {

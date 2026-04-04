@@ -5,7 +5,7 @@ import { homedir } from 'os';
 const LOG_DIR = join(homedir(), '.grasp');
 const LOG_PATH = join(LOG_DIR, 'audit.log');
 
-function getAuditLogPath() {
+export function getAuditLogPath() {
   return process.env.GRASP_AUDIT_LOG_PATH || LOG_PATH;
 }
 
@@ -16,6 +16,7 @@ function parseAuditLine(line) {
   const [, timestamp, action, remainder] = match;
   let detail = remainder.trim();
   let meta = null;
+  let taskId = null;
   const markerIndex = detail.lastIndexOf(' :: ');
 
   if (markerIndex !== -1) {
@@ -28,9 +29,16 @@ function parseAuditLine(line) {
     }
   }
 
+  const taskMatch = /^<([^>]+)>\s+(.*)$/.exec(detail);
+  if (taskMatch) {
+    taskId = taskMatch[1];
+    detail = taskMatch[2];
+  }
+
   return {
     timestamp,
     action,
+    taskId,
     detail,
     meta,
   };
@@ -95,6 +103,24 @@ export async function readLogs(n = 50) {
     const content = await readFile(getAuditLogPath(), 'utf8');
     const lines = content.split('\n').filter(Boolean);
     return lines.slice(-n);
+  } catch {
+    return [];
+  }
+}
+
+export async function readLogEntries(n = 50, { taskId = null } = {}) {
+  try {
+    const content = await readFile(getAuditLogPath(), 'utf8');
+    const lines = content.split('\n').filter(Boolean);
+    const entries = lines
+      .map((line) => parseAuditLine(line))
+      .filter(Boolean);
+
+    const filtered = taskId
+      ? entries.filter((entry) => entry.taskId === taskId)
+      : entries;
+
+    return filtered.slice(-n);
   } catch {
     return [];
   }

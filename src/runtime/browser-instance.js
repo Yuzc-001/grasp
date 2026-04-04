@@ -9,12 +9,12 @@ export function inferBrowserInstance(versionInfo = {}) {
     : null;
   const normalized = browser?.toLowerCase() ?? '';
 
-  let headless = null;
-  if (normalized.includes('headlesschrome/')) {
-    headless = true;
-  } else if (normalized.includes('chrome/')) {
-    headless = false;
-  }
+  let headless = null;
+  if (normalized.includes('headlesschrome/') || normalized.includes('headlessedg/')) {
+    headless = true;
+  } else if (normalized.includes('chrome/') || normalized.includes('edg/')) {
+    headless = false;
+  }
 
   const display = headless === true
     ? 'headless'

@@ -79,6 +79,16 @@ function isEditableField(field) {
 }
 
 function getNextVerifyAction(snapshot) {
+  const verification = snapshot?.verification?.summary ?? snapshot?.verification ?? {};
+  if (
+    snapshot?.completion_status === 'ready'
+    && Number(verification.missing_required ?? 0) === 0
+    && Number(verification.risky_pending ?? 0) === 0
+    && Number(verification.unresolved ?? 0) === 0
+  ) {
+    return 'safe_submit';
+  }
+
   const fields = Array.isArray(snapshot?.fields) ? snapshot.fields : [];
   if (fields.some((field) => field.risk_level === 'safe' && field.current_state !== 'filled' && isTextLikeField(field) && isEditableField(field))) {
     return 'fill_form';
@@ -207,6 +217,7 @@ export function registerFormTools(server, state, deps = {}) {
     async () => {
       const page = await getPage();
       await syncState(page, state, { force: true });
+      const instance = await getBrowserInstance();
       const pageInfo = {
         title: await page.title(),
         url: page.url(),
@@ -233,6 +244,7 @@ export function registerFormTools(server, state, deps = {}) {
           ambiguous_labels: snapshot.ambiguous_labels,
           autosave_possible: true,
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );
@@ -305,6 +317,7 @@ export function registerFormTools(server, state, deps = {}) {
           writes: operation.evidence,
           autosave_possible: operation.evidence.some((item) => item.autosave_possible),
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );
@@ -365,6 +378,7 @@ export function registerFormTools(server, state, deps = {}) {
           ambiguous_labels: refreshed.ambiguous_labels ?? [],
           write: operation.evidence ?? null,
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );
@@ -425,6 +439,7 @@ export function registerFormTools(server, state, deps = {}) {
           ambiguous_labels: refreshed.ambiguous_labels ?? [],
           write: operation.evidence ?? null,
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );
@@ -438,6 +453,7 @@ export function registerFormTools(server, state, deps = {}) {
     async () => {
       const page = await getPage();
       await syncState(page, state, { force: true });
+      const instance = await getBrowserInstance();
       const pageInfo = {
         title: await page.title(),
         url: page.url(),
@@ -468,6 +484,7 @@ export function registerFormTools(server, state, deps = {}) {
           ambiguous_labels: snapshot.ambiguous_labels ?? [],
           autosave_possible: true,
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );
@@ -520,6 +537,7 @@ export function registerFormTools(server, state, deps = {}) {
           ambiguous_labels: snapshot.ambiguous_labels ?? [],
           submit: submit.evidence ?? null,
         },
+        runtime: instance ? { instance } : {},
       });
     }
   );

@@ -1,4 +1,6 @@
-function compactText(value) {
+import { WORKSPACE_SIGNAL_DICTIONARY, containsAnySignal } from './page-signals.js';
+
+function compactText(value) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
@@ -101,23 +103,29 @@ function isSelectedItem(item) {
 }
 
 function hasExactLoadingShellText(text) {
-  return text.includes('加载中，请稍候')
-    || (text.includes('加载中') && text.includes('请稍候'))
-    || text.includes('正在加载');
+
+  return containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.loadingShell)
+
+    || (text.includes('加载中') && text.includes('请稍候'));
+
 }
+
+
 
 function hasThreadPromptText(text) {
-  return text.includes('按enter键发送')
-    || text.includes('发送消息')
-    || text.includes('发消息')
-    || text.includes('输入消息');
+
+  return containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.composerPrompts);
+
 }
 
+
+
 function hasThreadContextText(text) {
-  return text.includes('消息')
-    || text.includes('聊天')
-    || text.includes('对话');
+
+  return containsAnySignal(text, WORKSPACE_SIGNAL_DICTIONARY.threadContext);
+
 }
+
 
 function isComposerSurface(workspaceSurface) {
   return workspaceSurface === 'thread' || workspaceSurface === 'composer';

@@ -2,14 +2,22 @@
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [GitHub](https://github.com/Yuzc-001/grasp) · [Issues](https://github.com/Yuzc-001/grasp/issues)
 
-[![Version](https://img.shields.io/badge/version-v0.6.6-0B1738?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.7-0B1738?style=flat-square)](./CHANGELOG.md)
+
 [![License](https://img.shields.io/badge/license-MIT-23C993?style=flat-square)](./LICENSE)
-[![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor-5B6CFF?style=flat-square)](./README.zh-CN.md#快速开始)
+
+[![Validated](https://img.shields.io/badge/validated-Claude%20Code%20%7C%20Codex%20%7C%20Cursor%20%7C%20Alma-5B6CFF?style=flat-square)](./README.zh-CN.md#快速开始)
+
 > **Grasp 是一个会先选路的 AI 浏览器运行时。One URL, one best path.**
 
-Grasp 完全本地运行，使用专属的 `chrome-grasp` browser 配置目录，让智能体拥有持久、可见、可恢复的网页运行时，而不是一次性标签页和单站点脚本。这个专属 profile 是 Grasp 的运行时边界，不等于“你当前随手正在使用的任意本地浏览器窗口”。`v0.6.6` 的核心承诺很简单：给它一个 URL 和任务意图，它先选出最合适的路径，让这个决定可解释，在改页面前先确认运行时边界，并沿着同一条 runtime 路径继续执行，同时把当前所在 surface 的边界直接回显到高层工具响应里，在 surface 不匹配时拒绝高层表单 / 工作台动作，并把按 route/surface 动态拼出的 prompt 包一并挂到响应元数据里。
 
-- 当前包版本：`v0.6.6`
+
+Grasp 完全本地运行，默认启动专属的 `chrome-grasp` 浏览器，让智能体拥有持久、可见、可恢复的网页运行时，而不是一次性标签页和单站点脚本。这个专属 runtime 是 Grasp 的工作边界，不等于“你当前随手正在使用的任意本地浏览器窗口”。`v0.6.7` 的核心承诺很简单：给它一个 URL 和任务意图，它先选出最合适的路径，让这个决定可解释，在改页面前先确认运行时边界，并沿着同一条 runtime 路径继续执行，同时把当前所在 surface 的边界直接回显到高层工具响应里，在 surface 不匹配时拒绝高层表单 / 工作台动作，并把按 route/surface 动态拼出的 prompt 包一并挂到响应元数据里。
+
+
+
+- 当前包版本：`v0.6.7`
+
 - 先看展示单页：[docs/browser-runtime-landing.html](./docs/browser-runtime-landing.html)
 - 对外文档入口：[docs/README.md](./docs/README.md)
 - 发布说明：[CHANGELOG.md](./CHANGELOG.md)
@@ -72,7 +80,7 @@ continue()
 npx -y @yuzc-001/grasp
 ```
 
-它会检测 Chrome，启动专属 `chrome-grasp` 浏览器配置目录，并帮助你把运行时接到 AI 客户端上。
+它会检测 Chrome 或 Edge，启动专属 `chrome-grasp` 浏览器配置目录，验证可见浏览器运行时，并帮助你把运行时接到 AI 客户端上。
 
 这里连接的是 Grasp 自己的 CDP runtime。除非你明确把别的 CDP endpoint 指给它，否则它不是“当前用户正在看的任意浏览器会话”。
 

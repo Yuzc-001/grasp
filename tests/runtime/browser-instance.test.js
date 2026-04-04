@@ -46,14 +46,33 @@ test('requireVisibleBrowserInstance returns an error for headless endpoints', ()
   assert.match(message, /HeadlessChrome\/136\.0\.7103\.114/);
 });
 
-test('requireVisibleBrowserInstance accepts windowed endpoints', () => {
-  const message = requireVisibleBrowserInstance({
-    browser: 'Chrome/136.0.7103.114',
-    protocolVersion: '1.3',
-    headless: false,
-    display: 'windowed',
-    warning: null,
-  }, 'real browser check');
-
-  assert.equal(message, null);
-});
+test('requireVisibleBrowserInstance accepts windowed endpoints', () => {
+  const message = requireVisibleBrowserInstance({
+    browser: 'Chrome/136.0.7103.114',
+    protocolVersion: '1.3',
+    headless: false,
+    display: 'windowed',
+    warning: null,
+  }, 'real browser check');
+
+  assert.equal(message, null);
+});
+
+test('inferBrowserInstance recognizes visible Edge and headless Edge endpoints', () => {
+  const edge = inferBrowserInstance({
+    Browser: 'Edg/136.0.3240.76',
+    'Protocol-Version': '1.3',
+  });
+  const headlessEdge = inferBrowserInstance({
+    Browser: 'HeadlessEdg/136.0.3240.76',
+    'Protocol-Version': '1.3',
+  });
+
+  assert.equal(edge.headless, false);
+  assert.equal(edge.display, 'windowed');
+  assert.equal(edge.warning, null);
+
+  assert.equal(headlessEdge.headless, true);
+  assert.equal(headlessEdge.display, 'headless');
+  assert.match(headlessEdge.warning, /headless browser/i);
+});

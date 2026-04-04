@@ -54,3 +54,26 @@ test('buildGatewayResponse injects agent boundary guidance into text and meta', 
   assert.match(response.content[0].text, /Boundary: public_read/);
   assert.match(response.content[0].text, /Boundary guidance:/);
 });
+
+test('buildGatewayResponse includes a runtime state register for the active route', () => {
+  const response = buildGatewayResponse({
+    status: 'direct',
+    page: { title: 'Example', url: 'https://example.com', page_role: 'content', risk_gate: false, grasp_confidence: 'high' },
+    continuation: { can_continue: true, suggested_next_action: 'extract', handoff_state: 'idle' },
+    route: { selected_mode: 'public_read' },
+  });
+
+  assert.deepEqual(response.meta.runtime_state, {
+    goal: 'Read the current page on the active route and extract useful content.',
+    current_boundary: 'public_read',
+    redlines: ['page-changing actions', 'form_runtime tools', 'workspace_runtime tools'],
+    evidence_anchor: {
+      route_mode: 'public_read',
+      page_role: 'content',
+      url: 'https://example.com',
+      handoff_state: 'idle',
+      instance_display: null,
+    },
+    next_gap: 'Need fresh extraction evidence from the current readable page.',
+  });
+});

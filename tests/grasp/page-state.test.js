@@ -25,6 +25,23 @@ test('page grasp state classifies auth page and marks reacquired on first captur
   assert.equal(next.pageIdentity, 'https://github.com/login#0');
 });
 
+test('public repo pages with sign-in copy do not classify as auth', () => {
+  const state = createPageGraspState();
+  const next = applySnapshotToPageGraspState(state, {
+    url: 'https://github.com/vercel/next.js',
+    snapshotHash: 'repo-a',
+    title: 'GitHub - vercel/next.js: The React Framework for the Web',
+    bodyText: 'Skip to content Sign in Product Solutions Open Source Pricing Search code repositories Issues Pull requests Discussions The React Framework for the Web Latest commit message docs message helpers email notifications',
+    nodes: 32,
+    forms: 1,
+    navs: 9,
+    headings: ['next.js', 'The React Framework for the Web'],
+  });
+
+  assert.notEqual(next.currentRole, 'auth');
+  assert.equal(next.currentRole, 'navigation-heavy');
+});
+
 test('page grasp state classifies docs pages more accurately', () => {
   const state = applySnapshotToPageGraspState(createPageGraspState(), {
     url: 'https://playwright.dev/docs/intro',
@@ -67,6 +84,37 @@ test('navigation-heavy admin pages do not collapse into form pages', () => {
 
   assert.equal(state.currentRole, 'navigation-heavy');
   assert.equal(state.workspaceSurface, 'list');
+});
+
+test('dense public landing pages do not collapse into form pages just because they expose many controls', () => {
+  const state = applySnapshotToPageGraspState(createPageGraspState(), {
+    url: 'https://www.zhipin.com/zhengzhou/?seoRefer=index',
+    snapshotHash: 'boss-home',
+    title: 'BOSS直聘-找工作BOSS直聘直接谈！招聘求职找工作！',
+    bodyText: '郑州 首页 职位 公司 校园 APP 我要招聘 我要找工作 登录/注册 职位类型 地图 搜索 热门职位 Java 产品经理 前端开发工程师 测试工程师 运维工程师 数据分析师 平面设计 销售专员 招聘 热招职位 销售 客服 运营 直播 医疗 教育 服务业 人力 财务 行政 房地产 建筑 供应链 物流',
+    nodes: 2516,
+    forms: 31,
+    navs: 0,
+    headings: ['热招职位'],
+  });
+
+  assert.notEqual(state.currentRole, 'form');
+  assert.equal(state.currentRole, 'content');
+});
+
+test('wechat official accounts landing page stays content instead of collapsing into form', () => {
+  const state = applySnapshotToPageGraspState(createPageGraspState(), {
+    url: 'https://mp.weixin.qq.com/',
+    snapshotHash: 'wechat-home',
+    title: '微信公众平台',
+    bodyText: '微信公众平台 立即注册 简体中文 使用账号登录 登录 微信扫一扫，选择该微信下的 公众平台账号登录 微信公众平台 账号分类 服务号 公众号 小程序 企业微信',
+    nodes: 34,
+    forms: 6,
+    navs: 0,
+    headings: ['微信公众平台', '账号分类'],
+  });
+
+  assert.equal(state.currentRole, 'content');
 });
 
 test('page grasp state classifies challenge-style pages as checkpoint', () => {

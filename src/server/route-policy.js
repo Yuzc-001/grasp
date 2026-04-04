@@ -29,11 +29,14 @@ function inferIntentFromPageState(pageState = {}, lastIntent = null) {
   if (lastIntent) return lastIntent;
 
   const currentRole = pageState?.currentRole ?? 'unknown';
-  if (currentRole === 'workspace' || pageState?.workspaceSurface != null) {
+  if (currentRole === 'workspace' || (pageState?.workspaceSurface != null && currentRole !== 'navigation-heavy')) {
     return 'workspace';
   }
-  if (currentRole === 'form' || currentRole === 'auth') {
+  if (currentRole === 'form') {
     return 'submit';
+  }
+  if (currentRole === 'auth') {
+    return 'act';
   }
   return 'extract';
 }
@@ -52,8 +55,9 @@ export function decideRoute({
 } = {}) {
   const handoffState = handoff?.state ?? 'idle';
   const currentRole = pageState?.currentRole ?? 'unknown';
-  const workspaceLike = currentRole === 'workspace' || pageState?.workspaceSurface != null;
-  const formLike = currentRole === 'form' || currentRole === 'auth';
+  const workspaceLike = currentRole === 'workspace'
+    || (pageState?.workspaceSurface != null && currentRole !== 'navigation-heavy');
+  const formLike = currentRole === 'form';
 
   if (isBlockedHandoffState(handoffState) || pageState?.riskGateDetected || currentRole === 'checkpoint') {
     return {

@@ -2,7 +2,7 @@
 
 Public docs for the Grasp route-aware Agent Web Runtime.
 
-Current package release: `v0.6.6`
+Current package release: `v0.6.7`
 
 ---
 
@@ -20,6 +20,7 @@ If you want the fastest visual overview of the product, start there.
 ## Product Overview
 
 - [Browser Runtime for Agents](./product/browser-runtime-for-agents.md)
+- [Design Philosophy](./product/design-philosophy.md)
 
 Core runtime story:
 
@@ -50,8 +51,15 @@ Read in this order:
 
 For the canonical product-layer mapping, see [Browser Runtime for Agents](./product/browser-runtime-for-agents.md).
 
-- [MCP Tools](./reference/mcp-tools.md)
-- [Agent Skill](../skill/SKILL.md)
+- [MCP Tools](./reference/mcp-tools.md)
+- [Agent Skill](../skill/SKILL.md)
+
+Supported agent clients in the current release surface:
+
+- Claude Code
+- Codex CLI
+- Cursor / Claude Desktop style MCP clients
+- Alma
 
 ## Reference
 
@@ -60,8 +68,14 @@ For the canonical product-layer mapping, see [Browser Runtime for Agents](./prod
 
 ## Releases
 
+
+
 - [CHANGELOG](../CHANGELOG.md)
+
+- [v0.6.7 release notes](./release-notes-v0.6.7.md)
+
 - [v0.6.3 release notes](./release-notes-v0.6.3.md)
+
 - [v0.6.1 release notes](./release-notes-v0.6.1.md)
 - [v0.6.0 release notes](./release-notes-v0.6.0.md)
 - [v0.55.0 release notes](./release-notes-v0.55.0.md)

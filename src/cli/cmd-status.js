@@ -1,9 +1,17 @@
 import { readConfig } from './config.js';
+
 import { detectChromePath, startChromeHint } from './detect-chrome.js';
+
+import { formatBanner, printBlock } from './output.js';
+
 import { readRuntimeTruth } from '../server/runtime-status.js';
+
 import { readLatestRouteDecision, readLogs } from '../server/audit.js';
+
 import { isSafeModeEnabled } from '../server/state.js';
+
 import { readBrowserInstance } from '../runtime/browser-instance.js';
+
 
 async function getActiveChromeTab(cdpUrl) {
   try {
@@ -52,10 +60,7 @@ export async function runStatus() {
   const safeMode = isSafeModeEnabled();
   const safeModeNote = safeMode === config.safeMode ? '' : ` (config: ${config.safeMode ? 'on' : 'off'})`;
 
-  const sep = '─'.repeat(44);
-  console.log('');
-  console.log('  Grasp Runtime Status');
-  console.log(`  ${sep}`);
+  printBlock(formatBanner('Grasp Runtime Status'));
 
   const instance = await readBrowserInstance(cdpUrl);
   const connected = instance !== null;

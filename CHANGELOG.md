@@ -4,6 +4,28 @@ All notable changes to Grasp are documented here.
 
 ---
 
+## v0.6.7 — 2026-04-04
+
+### Added
+- First-run runtime bootstrap now consistently launches the dedicated `chrome-grasp` browser profile and verifies the visible browser runtime before reporting ready.
+- Added `grasp doctor` style diagnostics coverage around CLI output and runtime setup behavior.
+- Added workspace response/view builder layers so workspace tools expose a cleaner orchestrator → view → response pipeline.
+- Added regression coverage for Edge browser instance detection, non-standard HintMap targets, and CSS visibility-driven page-state changes.
+
+### Changed
+- README, docs index, examples, and release references now consistently identify the current release as `v0.6.7`.
+- Public support surface now explicitly includes Alma alongside Claude Code, Codex, and Cursor.
+- Browser instance detection now recognizes visible and headless Edge endpoints correctly.
+- HintMap discovery now covers common non-standard interactive elements such as tabindex/pointer-cursor/custom click targets.
+- Page-state syncing now treats CSS visibility/display changes as real page-state changes instead of relying only on text/node deltas.
+
+### Validated
+- CLI/version consistency checks pass, including help/status/doctor and release surface references.
+- Focused regressions pass for Edge detection, non-standard HintMap discovery, and CSS visibility-driven `domRevision` updates.
+- Real-browser QA passes for WeChat home, BOSS home, and the Cloudflare challenge page on the dedicated visible runtime.
+
+---
+
 ## v0.6.6 — 2026-04-01
 
 ### Added

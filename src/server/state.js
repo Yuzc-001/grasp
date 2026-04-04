@@ -66,10 +66,12 @@ export function getActiveTaskFrame(state) {
   return state?.taskFrames?.get(taskId) ?? null;
 }
 
-export async function syncPageState(page, state, { force = false } = {}) {
+export async function syncPageState(page, state, { force = false, probeImpl = probe, listToolsImpl = listTools, buildHintMapImpl = buildHintMap } = {}) {
+
   const url = page.url();
   const snapshotData = await capturePageSnapshot(page);
-  const snapshotHash = `${url}|${snapshotData.nodes}|${snapshotData.bodyText}`;
+  const snapshotHash = `${url}|${snapshotData.nodes}|${snapshotData.bodyText}|${snapshotData.styleFingerprint ?? ''}`;
+
   const prevPageState = state.pageState ?? createPageGraspState();
   const nextPageState = applySnapshotToPageGraspState(prevPageState, {
     url,
@@ -99,18 +101,20 @@ export async function syncPageState(page, state, { force = false } = {}) {
   }
 
   await retryTransientPageStep(async () => {
-    const webmcp = await probe(page);
+    const webmcp = await probeImpl(page);
+
     state.lastUrl = url;
 
     if (webmcp.available) {
-      const tools = await listTools(page, webmcp);
+      const tools = await listToolsImpl(page, webmcp);
+
       state.webmcp = { ...webmcp, tools };
       state.hintMap = [];
       return;
     }
 
     state.webmcp = webmcp;
-    state.hintMap = await buildHintMap(page, state.hintRegistry, state.hintCounters);
+    state.hintMap = await buildHintMapImpl(page, state.hintRegistry, state.hintCounters);
   });
   return state;
 }

@@ -1,6 +1,8 @@
 node_modules/
 .worktrees/
 .claude/
+.github/
+openspec/
 *.log
 .env
 .DS_Store

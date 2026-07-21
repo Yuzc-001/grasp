@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const repository = process.env.STAR_HISTORY_REPO || process.env.GITHUB_REPOSITORY || 'Yuzc-001/grasp';
@@ -8,16 +8,60 @@ if (!owner || !repo) {
   throw new Error(`Invalid repository name: ${repository}`);
 }
 
-const outputPath = new URL('../star-history.svg', import.meta.url);
-const token = process.env.GITHUB_TOKEN;
+const svgPath = new URL('../star-history.svg', import.meta.url);
+const dataPath = new URL('../star-history-data.json', import.meta.url);
+const token = process.env.STAR_HISTORY_TOKEN || process.env.GITHUB_TOKEN;
 
 async function main() {
-  const starredAtValues = await fetchStargazers();
-  const series = buildSeries(starredAtValues);
+  const { series, source } = await resolveSeries();
   const svg = buildSvg(series);
 
-  await writeFile(outputPath, svg, 'utf8');
-  console.log(`Updated ${fileURLToPath(outputPath)} with ${series.at(-1)?.count ?? 0} stars`);
+  await writeFile(svgPath, svg, 'utf8');
+  await writeFile(
+    dataPath,
+    `${JSON.stringify(
+      {
+        repository,
+        source,
+        updatedAt: new Date().toISOString(),
+        series,
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+
+  console.log(
+    `Updated ${fileURLToPath(svgPath)} and ${fileURLToPath(dataPath)} with ${series.at(-1)?.count ?? 0} stars (source: ${source})`,
+  );
+}
+
+async function resolveSeries() {
+  try {
+    const starredAtValues = await fetchStargazers();
+    return {
+      series: buildSeriesFromTimestamps(starredAtValues),
+      source: 'stargazers-api',
+    };
+  } catch (error) {
+    if (!isAccessRestrictedError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `Stargazers API unavailable (${error.status || 'error'}): ${error.message.split('\n')[0]}`,
+    );
+    console.warn('Falling back to public stargazers_count snapshots via star-history-data.json');
+    return {
+      series: await buildSeriesFromSnapshots(),
+      source: 'public-snapshot',
+    };
+  }
+}
+
+function isAccessRestrictedError(error) {
+  return [401, 403, 404].includes(error?.status);
 }
 
 async function fetchStargazers() {
@@ -25,7 +69,7 @@ async function fetchStargazers() {
     return await fetchStargazersWithToken(token);
   } catch (error) {
     if (token && error?.status === 401) {
-      console.warn('GITHUB_TOKEN is invalid locally, retrying without authentication');
+      console.warn('Primary token was rejected, retrying without authentication');
       return fetchStargazersWithToken();
     }
 
@@ -35,7 +79,7 @@ async function fetchStargazers() {
 
 async function fetchStargazersWithToken(authToken) {
   const headers = {
-    Accept: 'application/vnd.github.v3.star+json',
+    Accept: 'application/vnd.github.star+json',
     'User-Agent': 'grasp-star-history-updater',
     'X-GitHub-Api-Version': '2022-11-28',
   };
@@ -81,7 +125,128 @@ async function fetchStargazersWithToken(authToken) {
   return starredAtValues.sort((left, right) => Date.parse(left) - Date.parse(right));
 }
 
-function buildSeries(starredAtValues) {
+async function buildSeriesFromSnapshots() {
+  const today = toUtcDay(new Date());
+  const currentCount = await fetchPublicStarCount();
+  const existing = await loadExistingSeries();
+  const byDate = new Map(existing.map((point) => [point.date, point.count]));
+
+  byDate.set(today, currentCount);
+
+  const sparse = [...byDate.entries()]
+    .map(([date, count]) => ({ date, count }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  if (sparse.length === 0) {
+    return [{ date: today, count: currentCount }];
+  }
+
+  return densifySeries(sparse, today);
+}
+
+async function fetchPublicStarCount() {
+  try {
+    return await fetchPublicStarCountWithToken(token);
+  } catch (error) {
+    if (token && error?.status === 401) {
+      console.warn('Token rejected for public repo metadata, retrying without authentication');
+      return fetchPublicStarCountWithToken();
+    }
+
+    throw error;
+  }
+}
+
+async function fetchPublicStarCountWithToken(authToken) {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'grasp-star-history-updater',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+
+  if (!response.ok) {
+    const body = await response.text();
+    const error = new Error(
+      `Failed to read public stargazers_count: ${response.status} ${response.statusText}\n${body}`,
+    );
+    error.status = response.status;
+    throw error;
+  }
+
+  const payload = await response.json();
+  const count = Number(payload?.stargazers_count);
+
+  if (!Number.isFinite(count) || count < 0) {
+    throw new Error(`Unexpected stargazers_count value: ${payload?.stargazers_count}`);
+  }
+
+  return count;
+}
+
+async function loadExistingSeries() {
+  try {
+    const raw = await readFile(dataPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const series = Array.isArray(parsed) ? parsed : parsed?.series;
+
+    if (!Array.isArray(series)) {
+      return [];
+    }
+
+    return series
+      .map((point) => ({
+        date: toUtcDay(point.date),
+        count: Number(point.count),
+      }))
+      .filter((point) => point.date && Number.isFinite(point.count) && point.count >= 0)
+      .sort((left, right) => left.date.localeCompare(right.date));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return [];
+    }
+
+    console.warn(`Could not load existing star-history-data.json: ${error.message}`);
+    return [];
+  }
+}
+
+function densifySeries(sparseSeries, endDay) {
+  const series = [];
+  let running = sparseSeries[0].count;
+  let sparseIndex = 0;
+
+  for (
+    let cursor = new Date(`${sparseSeries[0].date}T00:00:00Z`);
+    cursor <= new Date(`${endDay}T00:00:00Z`);
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const day = toUtcDay(cursor);
+
+    while (
+      sparseIndex + 1 < sparseSeries.length &&
+      sparseSeries[sparseIndex + 1].date <= day
+    ) {
+      sparseIndex += 1;
+      running = sparseSeries[sparseIndex].count;
+    }
+
+    if (sparseSeries[sparseIndex].date === day) {
+      running = sparseSeries[sparseIndex].count;
+    }
+
+    series.push({ date: day, count: running });
+  }
+
+  return series;
+}
+
+function buildSeriesFromTimestamps(starredAtValues) {
   const today = toUtcDay(new Date());
 
   if (starredAtValues.length === 0) {

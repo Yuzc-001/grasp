@@ -15,7 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.ref_name }}
+          # Scheduled runs always target the default branch.
+          ref: ${{ github.event_name == 'schedule' && github.event.repository.default_branch || github.ref_name }}
 
       - uses: actions/setup-node@v6
         with:
@@ -23,18 +24,22 @@ jobs:
 
       - name: Generate star history svg
         env:
+          # Optional fine-grained PAT with metadata read on this repo.
+          # GITHUB_TOKEN is no longer enough for /stargazers after GitHub's 2026 access restrictions.
+          STAR_HISTORY_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/update-star-history.mjs
 
-      - name: Commit refreshed svg
+      - name: Commit refreshed artifacts
         run: |
-          if git diff --quiet -- star-history.svg; then
-            echo "star-history.svg unchanged"
+          if git diff --quiet -- star-history.svg star-history-data.json; then
+            echo "star history artifacts unchanged"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add star-history.svg
+          git add star-history.svg star-history-data.json
           git commit -m "chore: update star history svg"
-          git push origin HEAD:${GITHUB_REF_NAME}
+          git push

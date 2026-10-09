@@ -45,5 +45,8 @@
   "bugs": {
     "url": "https://github.com/Yuzc-001/grasp/issues"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "fast-uri": "4.1.2"
+  }
 }

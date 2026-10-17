@@ -24,7 +24,7 @@
     "test:watch": "node --test --watch"
   },
   "dependencies": {
-    "@chenglou/pretext": "^0.0.3",
+    "@chenglou/pretext": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.8.0",
     "playwright-core": "^1.58.2",
     "zod": "^3.25.76"

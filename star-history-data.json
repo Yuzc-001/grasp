@@ -1,7 +1,7 @@
 {
   "repository": "Yuzc-001/grasp",
   "source": "stargazers-api",
-  "updatedAt": "2026-11-27T20:40:32.517Z",
+  "updatedAt": "2026-11-28T06:17:25.681Z",
   "series": [
     {
       "date": "2026-03-17",
@@ -1025,6 +1025,10 @@
     },
     {
       "date": "2026-11-27",
+      "count": 72
+    },
+    {
+      "date": "2026-11-28",
       "count": 72
     }
   ]
